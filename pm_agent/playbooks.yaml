@@ -1,0 +1,94 @@
+# Engagement playbooks — what a PM should find out for each kind of engagement.
+#
+# This is DATA, not code. Supporting a new kind of service (IoT, game dev,
+# compliance audit, ...) means adding an entry here; the agent does not change.
+#
+#   discovery_areas         topics worth asking the client about
+#   expected_nfr_categories review_spec flags any of these with no NFR yet
+#
+# Any engagement that fits none of these falls back to `other`.
+
+common:
+  discovery_areas:
+    - who the users and stakeholders are, and who signs off
+    - the business problem and why it matters now
+    - what success looks like and how it will be measured
+    - what is explicitly out of scope
+    - budget band, deadlines, and fixed external dates
+    - existing systems, data, and teams this touches
+    - regulatory or compliance obligations in the client's industry
+  expected_nfr_categories: [security]
+
+engagement_types:
+  new_build:
+    description: Build a new product, application, or platform from scratch.
+    discovery_areas:
+      - core user journeys and the smallest version worth launching
+      - expected users and growth over the first year
+      - platforms (web, mobile, desktop, API) and devices
+      - branding, accessibility, and localisation needs
+      - who operates and maintains it after launch
+    expected_nfr_categories: [performance, scalability, availability, usability]
+
+  enhancement:
+    description: Add features to or change an existing system.
+    discovery_areas:
+      - current system, its stack, and who owns the code
+      - what is broken or missing today, with examples
+      - which existing behaviour must not change
+      - release process and how changes reach users
+    expected_nfr_categories: [compatibility, performance]
+
+  migration:
+    description: Move systems, data, or infrastructure to a new platform (e.g. on-prem to cloud).
+    discovery_areas:
+      - inventory of what moves (apps, databases, data volume)
+      - acceptable downtime and cutover window
+      - data integrity and reconciliation expectations
+      - rollback plan if the migration fails
+      - target-platform constraints and existing contracts
+    expected_nfr_categories: [availability, data_integrity, performance, cost]
+
+  integration:
+    description: Connect two or more systems so data or processes flow between them.
+    discovery_areas:
+      - systems involved and who owns each
+      - direction, frequency, and volume of data flow
+      - available APIs, auth methods, and rate limits
+      - what happens when one side is down or data conflicts
+    expected_nfr_categories: [reliability, data_integrity, latency]
+
+  data_ai:
+    description: Analytics, data pipelines, machine learning, or generative-AI solutions.
+    discovery_areas:
+      - the decision or task the model or data product supports
+      - data sources, volume, quality, and who owns them
+      - how accuracy is judged and what an acceptable error is
+      - human review of outputs and handling of wrong answers
+      - privacy, bias, and explainability requirements
+    expected_nfr_categories: [accuracy, explainability, privacy, latency, cost]
+
+  consulting:
+    description: Advice, assessment, or a roadmap rather than built software.
+    discovery_areas:
+      - the question the client needs answered
+      - the decision this advice feeds into, and its deadline
+      - who the audience is (executive, technical, both)
+      - the expected deliverable format
+    expected_nfr_categories: []
+
+  support_optimisation:
+    description: Fix, stabilise, speed up, or reduce the cost of something already running.
+    discovery_areas:
+      - the symptom, when it started, and how often it happens
+      - current measurements (latency, error rate, cost) and targets
+      - monitoring and logs available
+      - change windows and risk tolerance
+    expected_nfr_categories: [performance, reliability, cost]
+
+  other:
+    description: Anything that does not fit the types above.
+    discovery_areas:
+      - what the client will physically receive at the end
+      - how the client will decide the engagement succeeded
+    expected_nfr_categories: []
