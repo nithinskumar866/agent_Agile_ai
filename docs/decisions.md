@@ -31,3 +31,15 @@ Pydantic validation still happens on every tool call.
 
 **Context compaction enabled** (`EventsCompactionConfig`, token-triggered; experimental in
 ADK 2.11). Safe because of the state-first design above.
+
+## 2026-10-14 — Dev agent & hierarchical multi-agent collaboration
+
+**Hierarchical delegation with shared state.** The PM agent (`product_manager`) remains the
+primary client-facing agent, with the Developer agent (`dev_agent`) attached via ADK's native
+`sub_agents` hierarchy.
+
+**Work product lives in session state.** The Dev agent reads `state["spec"]` created by the PM
+agent, ensuring zero loss of requirements context during handoff. Technical design, stack
+choices, components, and project scaffolding are stored in `state["tech_design"]` and published
+as `architecture_v1.md` artifacts.
+

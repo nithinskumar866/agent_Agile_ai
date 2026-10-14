@@ -1,25 +1,40 @@
 # AgentCorp — a technology services company run by Google ADK agents
 
 Learning project for Google's Agent Development Kit. Each department of a services company
-becomes an agent. **Current stage: foundation — the Product Manager agent only.**
+becomes an agent. **Current stage: Product Manager & Developer multi-agent collaboration.**
 
-## The PM agent
+## Agents
 
+### 1. The PM Agent (`pm_agent`)
 Talks to a client (you, in `adk web`) about any kind of engagement — new build, migration,
 integration, data/AI, consulting, support — and turns it into a structured, versioned
-requirements spec, published as a Markdown PRD.
+requirements spec, published as a Markdown PRD (`prd_v1.md`).
+
+### 2. The Dev Agent (`dev_agent`)
+Collaborates as an engineering sub-agent. Inspects the shared session state `state["spec"]`
+to formulate technology stack recommendations, design modular system architecture, and plan
+the project file structure scaffold, publishing `architecture_v1.md`.
 
 ```
-pm_agent/
-├── agent.py         # LlmAgent + App (with context compaction)
-├── prompt.py        # role + working method; live spec status injected every turn
-├── tools.py         # 14 tools the model calls — thin wrappers, return {"error"} on bad input
-├── spec_logic.py    # deterministic core: IDs, review checks, approval gate, PRD rendering
-├── schema.py        # RequirementsSpec — the handoff contract for future agents
-├── playbooks.yaml   # engagement types + what to ask for each (data, not code)
-└── config.py        # model, limits — all from environment variables
-tests/               # deterministic tests, no API key needed
-docs/decisions.md    # why things are the way they are
+pm_agent/               # Product Manager agent
+├── agent.py            # LlmAgent with sub_agents=[dev_agent] + App
+├── prompt.py           # PM role & dev delegation guidelines
+├── tools.py            # 14 tools writing to state["spec"]
+├── spec_logic.py       # Deterministic core: IDs, review checks, PRD rendering
+├── schema.py           # RequirementsSpec handoff contract
+├── playbooks.yaml      # Engagement types & discovery areas
+└── config.py           # Model and limits from environment
+
+dev_agent/              # Developer & Technical Architect agent
+├── agent.py            # LlmAgent & standalone App
+├── prompt.py           # Architect role & technical instruction
+├── tools.py            # Tech stack, architecture component, and scaffold tools
+├── logic.py            # Deterministic architecture rendering & state persistence
+├── schema.py           # TechDesign schemas
+└── config.py           # Dev agent configuration
+
+tests/                  # 24 deterministic tests, no API key needed
+docs/decisions.md       # Architecture decision log
 ```
 
 ## Run it
