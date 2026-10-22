@@ -47,6 +47,23 @@ def _invalid(name: str, value: object, allowed) -> Optional[dict]:
     return None
 
 
+def _user_message(tool_context: ToolContext) -> Optional[str]:
+    """Text of the client message that started this turn, or None if unavailable."""
+    content = getattr(tool_context, "user_content", None)
+    if content is None or not content.parts:
+        return None
+    return "\n".join(p.text for p in content.parts if p.text) or None
+
+
+def _unknown_deliverables(spec, ids: list[str]) -> Optional[dict]:
+    """Milestones may only include functional requirements and user stories that exist."""
+    known = {i.id for s in ("functional_requirements", "user_stories") for i in getattr(spec, s)}
+    unknown = [i for i in ids if i not in known]
+    if unknown:
+        return {"error": f"Unknown functional requirement / user story IDs: {unknown}."}
+    return None
+
+
 # ── discovery ────────────────────────────────────────────────────────────────
 
 def get_engagement_playbook(engagement_type: str) -> dict:
@@ -260,6 +277,8 @@ def add_milestone(name: str, includes: list[str], relative_size: RelativeSize, t
     if err := _invalid("relative_size", relative_size, _SIZES):
         return err
     spec = logic.load_spec(tool_context.state)
+    if err := _unknown_deliverables(spec, includes):
+        return err
     m = Milestone(id=logic.next_id(spec, "milestones"), name=name, includes=includes, relative_size=relative_size)
     spec.milestones.append(m)
     logic.record_change(spec, f"Added {m.id}")
@@ -279,6 +298,13 @@ def update_item(
     acceptance_criteria: Optional[list[str]] = None,
     i_want: Optional[str] = None,
     so_that: Optional[str] = None,
+    as_a: Optional[str] = None,
+    category: Optional[str] = None,
+    impact: Optional[Impact] = None,
+    mitigation: Optional[str] = None,
+    name: Optional[str] = None,
+    includes: Optional[list[str]] = None,
+    relative_size: Optional[RelativeSize] = None,
 ) -> dict:
     """Change an existing item in place, keeping its ID. Only pass the fields that change.
 
@@ -286,28 +312,46 @@ def update_item(
     pass source='client'). Do not delete-and-re-add — that loses traceability.
 
     Args:
-        item_id: e.g. 'FR-2', 'US-1', 'A-3'.
+        item_id: e.g. 'FR-2', 'US-1', 'A-3', 'R-1', 'M-1'.
         change_reason: Why it changed, in a few words — goes into the change log.
-        text: New text (not for user stories; use i_want / so_that).
+        text: New text (not for user stories; use as_a / i_want / so_that).
         priority: 'must', 'should', 'could', or 'wont'.
         source: 'client', 'inferred', or 'assumption'.
         acceptance_criteria: Replaces the whole list.
         i_want: User stories only.
         so_that: User stories only.
+        as_a: User stories only.
+        category: Requirements only, e.g. 'performance'.
+        impact: Risks only — 'low', 'medium', or 'high'.
+        mitigation: Risks only.
+        name: Milestones only.
+        includes: Milestones only — replaces the whole list of FR / US IDs.
+        relative_size: Milestones only — 'S', 'M', 'L', or 'XL'.
     """
     if priority is not None and (err := _invalid("priority", priority, _PRIORITIES)):
         return err
     if source is not None and (err := _invalid("source", source, _SOURCES)):
         return err
+    if impact is not None and (err := _invalid("impact", impact, _IMPACTS)):
+        return err
+    if relative_size is not None and (err := _invalid("relative_size", relative_size, _SIZES)):
+        return err
     spec = logic.load_spec(tool_context.state)
     found = logic.find_item(spec, item_id)
     if found is None:
         return {"error": f"No item {item_id!r}."}
+    if includes is not None and (err := _unknown_deliverables(spec, includes)):
+        return err
     section, index = found
     item = getattr(spec, section)[index]
+    if category is not None:
+        category = category.strip().lower()
     changes = {k: v for k, v in dict(text=text, priority=priority, source=source,
                                       acceptance_criteria=acceptance_criteria,
-                                      i_want=i_want, so_that=so_that).items() if v is not None}
+                                      i_want=i_want, so_that=so_that, as_a=as_a, category=category,
+                                      impact=impact, mitigation=mitigation, name=name,
+                                      includes=includes, relative_size=relative_size).items()
+               if v is not None}
     unsupported = [k for k in changes if k not in type(item).model_fields]
     if unsupported:
         return {"error": f"{item_id} has no field(s) {unsupported}."}
@@ -353,13 +397,27 @@ async def publish_prd(change_summary: str, mark_approved: bool, tool_context: To
     """Publish a new version of the PRD as a Markdown artifact.
 
     Publishing bumps the version and moves all unpublished changes into the change log.
-    Publish when the client should look at the spec, not after every small edit.
+    Only call this when the client's latest message explicitly asks you to publish the PRD
+    (or explicitly approves it). Otherwise ask them first: "Shall I publish version N?".
 
     Args:
         change_summary: One sentence on what this version changes.
-        mark_approved: True only if the client has explicitly approved this spec. Refused
+        mark_approved: True only if the client's latest message explicitly approves the spec
+            (e.g. 'I approve the PRD'). Praise such as 'looks good', agreement, review requests,
+            and readiness questions are NOT approval — ask the client instead. Also refused
             while there are gaps, unanswered questions, or unconfirmed inferred items.
     """
+    message = _user_message(tool_context)
+    if logic.forbids_publishing(message):
+        return {"error": "The client asked you not to publish. Do not publish this turn."}
+    if not mark_approved and not logic.is_explicit_publish_request(message):
+        return {"error": "Publishing refused: the client has not explicitly asked you to publish the PRD. "
+                         "Tell them it is ready and ask: 'Shall I publish it for your review?'"}
+    if mark_approved and not logic.is_explicit_approval(message):
+        return {"error": "Approval refused: the client's latest message is not an explicit approval. "
+                         "Do not publish on their behalf; ask them whether they approve "
+                         f"version {logic.load_spec(tool_context.state).meta.version}."}
+
     spec = logic.load_spec(tool_context.state)
     report = logic.review(spec)
     if not report["ready_for_review"]:

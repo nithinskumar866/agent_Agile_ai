@@ -33,14 +33,15 @@ dev_agent/              # Developer & Technical Architect agent
 ├── schema.py           # TechDesign schemas
 └── config.py           # Dev agent configuration
 
-tests/                  # 24 deterministic tests, no API key needed
+tests/                  # 115 deterministic tests, no API key needed
+shared/models.py        # Model routing: Gemini, or NVIDIA via LiteLLM
 docs/decisions.md       # Architecture decision log
 ```
 
 ## Run it
 
 ```powershell
-cd "agent builder"
+cd Go_Agile_ai
 .venv\Scripts\activate               # created already; otherwise: python -m venv .venv; pip install -r requirements.txt
 copy pm_agent\.env.example pm_agent\.env   # then put your AI Studio key in it
 adk web                              # open http://localhost:8000, pick pm_agent
@@ -66,6 +67,11 @@ Sessions persist in `.adk/` across restarts (ADK's default local storage).
 - A vague, non-technical brief: *"I run 3 dental clinics and the phones never stop ringing."*
 - A technical one: *"Move our on-prem Postgres + Java monolith to GCP, max 1 hour downtime."*
 - Answer "you decide" to a question and see it become a labelled assumption.
-- Ask it for a price or a tech stack — it should decline and redirect.
+- Ask it for a price — it should decline and redirect.
+- Ask for a tech stack or architecture — it should hand over to `dev_agent`, which needs a
+  published PRD before it publishes `architecture_v1.md`.
+- Change the PRD after the architecture is published and see the Dev agent flag it as STALE.
+- Say "looks good" — it must not publish or approve until you say "publish the PRD" /
+  "I approve the PRD".
 - After it publishes, change your mind ("drop the mobile app") and see v2 + change log.
 - Contradict yourself ("no cloud" … later "must auto-scale") and see whether it notices.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
@@ -27,14 +28,73 @@ def save_tech_design(state: Dict[str, Any], design: TechDesign) -> None:
     state[TECH_DESIGN_STATE_KEY] = design.model_dump()
 
 
+def is_stale(design: TechDesign, spec: Optional[RequirementsSpec]) -> bool:
+    """True when a published architecture was built from an older PRD version than the current one."""
+    return bool(spec) and design.version > 0 and design.based_on_prd_version != spec.meta.version
+
+
 def status_line(design: TechDesign, spec: Optional[RequirementsSpec] = None) -> str:
     """Short summary of current technical design status for the instruction prompt."""
-    spec_v = f"PRD v{spec.version}" if spec and spec.version > 0 else "PRD draft"
-    return (
+    spec_v = f"PRD v{spec.meta.version}" if spec and spec.meta.version > 0 else "PRD not yet published"
+    line = (
         f"Base: {spec_v} | Architecture v{design.version} | "
         f"Stack items: {len(design.tech_stack)} | Components: {len(design.components)} | "
         f"Scaffold entries: {len(design.project_scaffold)}"
     )
+    if is_stale(design, spec):
+        line += (f" | STALE: architecture v{design.version} was built on PRD v{design.based_on_prd_version}"
+                 " — review the changes and republish")
+    return line
+
+
+def requirement_ids(spec: Optional[RequirementsSpec]) -> set[str]:
+    if not spec:
+        return set()
+    return {r.id for r in spec.functional_requirements + spec.non_functional_requirements}
+
+
+# Infrastructure that is easy to add and costly to run. It is only accepted when the
+# rationale cites a real PRD requirement or constraint — simplest stack by default.
+HEAVY_INFRA = re.compile(
+    r"\b(?:cache|caching|redis|memcached|valkey|queue|queues|queueing|kafka|rabbitmq|celery|sqs"
+    r"|pub/?sub|message\s+broker|event\s+bus|kubernetes|k8s|elasticsearch|opensearch"
+    r"|microservices?|service\s+mesh|cdn)\b",
+    re.IGNORECASE,
+)
+_PLACEHOLDER = re.compile(r"^\s*(?:none|n/?a|not\s+needed|not\s+required|-)\b", re.IGNORECASE)
+_ID = re.compile(r"\b(?:FR|NFR|C)-\d+\b")
+
+
+def justifying_ids(spec: Optional[RequirementsSpec]) -> set[str]:
+    """IDs a heavy-infrastructure choice may cite: requirements and constraints."""
+    if not spec:
+        return set()
+    return requirement_ids(spec) | {c.id for c in spec.constraints}
+
+
+def cited_ids(text: str) -> list[str]:
+    return _ID.findall(text)
+
+
+def infra_refusal(text: str, cited: list[str], spec: Optional[RequirementsSpec]) -> Optional[str]:
+    """Error message if `text` names heavy infrastructure without a real PRD ID in `cited`, else None."""
+    match = HEAVY_INFRA.search(text)
+    if not match:
+        return None
+    if set(cited) & justifying_ids(spec):
+        return None
+    return (f"'{match.group(0)}' is extra infrastructure. Prefer the simplest stack: leave it out, "
+            "or cite the FR-/NFR-/C- ID that requires it.")
+
+
+def is_placeholder(technology: str) -> bool:
+    """True for entries like 'None (not required)' that should simply be left out."""
+    return bool(_PLACEHOLDER.match(technology))
+
+
+def _cell(text: str) -> str:
+    """Make text safe inside a Markdown table cell."""
+    return text.replace("|", "\\|").replace("\n", " ")
 
 
 def render_architecture_markdown(design: TechDesign, spec: Optional[RequirementsSpec] = None) -> str:
@@ -46,7 +106,7 @@ def render_architecture_markdown(design: TechDesign, spec: Optional[Requirements
     ]
 
     if spec and spec.engagement:
-        lines.append(f"**Based on PRD:** {spec.engagement.summary} (v{spec.meta.version})")
+        lines.append(f"**Based on PRD:** {spec.engagement.summary} (v{design.based_on_prd_version})")
         if spec.engagement.domain:
             lines.append(f"**Domain:** {spec.engagement.domain}")
         if spec.engagement.client_context:
@@ -65,7 +125,7 @@ def render_architecture_markdown(design: TechDesign, spec: Optional[Requirements
     ])
     if design.tech_stack:
         for item in design.tech_stack:
-            lines.append(f"| {item.category} | `{item.technology}` | {item.rationale} |")
+            lines.append(f"| {_cell(item.category)} | `{_cell(item.technology)}` | {_cell(item.rationale)} |")
     else:
         lines.append("| - | *Pending analysis* | *No recommendations recorded yet* |")
     lines.append("")
@@ -82,6 +142,8 @@ def render_architecture_markdown(design: TechDesign, spec: Optional[Requirements
                     lines.append(f"- {resp}")
             if comp.dependencies:
                 lines.append(f"**Dependencies:** {', '.join(comp.dependencies)}")
+            if comp.addresses:
+                lines.append(f"**Addresses:** {', '.join(comp.addresses)}")
             lines.append("")
     else:
         lines.extend(["*No architecture components recorded yet.*", ""])
@@ -96,16 +158,15 @@ def render_architecture_markdown(design: TechDesign, spec: Optional[Requirements
     lines.extend(["```", ""])
 
     # Traceability back to Requirements Spec
-    if spec:
-        lines.extend([
-            "## Requirements Traceability",
-            "",
-            f"- **Target Goals:** {len(spec.goals)}",
-            f"- **Functional Requirements Addressed:** {len(spec.functional_requirements)}",
-            f"- **Non-Functional Requirements Addressed:** {len(spec.non_functional_requirements)}",
-            f"- **Key Constraints Respected:** {len(spec.constraints)}",
-            "",
-        ])
+    reqs = (spec.functional_requirements + spec.non_functional_requirements) if spec else []
+    if reqs:
+        lines.extend(["## Requirements Traceability", "", "| Requirement | Priority | Delivered by |",
+                      "| :--- | :--- | :--- |"])
+        for r in reqs:
+            owners = [c.name for c in design.components if r.id in c.addresses]
+            delivered = ", ".join(_cell(o) for o in owners) or "**Not yet addressed**"
+            lines.append(f"| **{r.id}** {_cell(r.text)} | {r.priority} | {delivered} |")
+        lines.append("")
 
     if design.change_log:
         lines.extend(["## Change Log", ""])

@@ -2,7 +2,10 @@
 
 import os
 
-MODEL = os.getenv("PM_MODEL", "gemini-2.5-flash")
+from shared.models import build_model
+
+MODEL_NAME = os.getenv("PM_MODEL", "gemini-3.6-flash")
+MODEL = build_model(MODEL_NAME)
 
 # Compaction: once a prompt reaches this many tokens, older turns are summarised
 # and only the last N raw events are kept. The spec itself is never at risk —

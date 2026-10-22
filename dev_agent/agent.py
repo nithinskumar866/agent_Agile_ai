@@ -20,8 +20,10 @@ dev_agent = LlmAgent(
     generate_content_config=types.GenerateContentConfig(temperature=0.2),
 )
 
-# Discoverable by adk web as a standalone app if selected directly
+# Discoverable by adk web as a standalone app if selected directly. A clone, because
+# `dev_agent` itself becomes the PM's sub-agent and an agent can only have one parent —
+# the standalone copy must not offer a transfer to a product_manager that isn't there.
 app = App(
     name="dev_agent",
-    root_agent=dev_agent,
+    root_agent=dev_agent.clone(),
 )

@@ -3,6 +3,7 @@
 import asyncio
 
 import pytest
+from google.genai import types
 
 from pm_agent import spec_logic as logic
 from pm_agent import tools
@@ -16,6 +17,7 @@ class FakeContext:
     def __init__(self):
         self.state = {}
         self.artifacts = {}
+        self.user_content = None  # the client message that started this turn
 
     async def save_artifact(self, filename, artifact):
         self.artifacts[filename] = artifact.inline_data.data.decode("utf-8")
@@ -27,7 +29,15 @@ def ctx():
     return FakeContext()
 
 
-def publish(ctx, summary="v", approved=False):
+def say(ctx, message):
+    """Set the client message the current turn is answering."""
+    ctx.user_content = types.Content(role="user", parts=[types.Part(text=message)])
+
+
+def publish(ctx, summary="v", approved=False, message=None):
+    if message is None:
+        message = "I approve the PRD." if approved else "Please publish the PRD."
+    say(ctx, message)
     return asyncio.run(tools.publish_prd(summary, approved, tool_context=ctx))
 
 
@@ -97,6 +107,30 @@ def test_removing_item_drops_it_from_milestones(ctx):
     assert logic.load_spec(ctx.state).milestones[0].includes == []
 
 
+def test_milestone_rejects_unknown_ids(ctx):
+    assert "error" in tools.add_milestone("MVP", ["FR-9"], "M", tool_context=ctx)
+    tools.add_requirement("functional", "a", "should", "client", tool_context=ctx)
+    tools.add_milestone("MVP", ["FR-1"], "M", tool_context=ctx)
+    assert "error" in tools.update_item("M-1", "x", tool_context=ctx, includes=["US-7"])
+
+
+def test_update_covers_risk_milestone_story_and_category_fields(ctx):
+    tools.add_requirement("non_functional", "fast", "should", "client", tool_context=ctx, category="perf")
+    tools.add_user_story("patient", "book", "save time", "should", "client", tool_context=ctx)
+    tools.add_risk("r", "low", "", tool_context=ctx)
+    tools.add_milestone("MVP", [], "S", tool_context=ctx)
+    assert tools.update_item("NFR-1", "x", tool_context=ctx, category=" Performance ")["ok"]
+    assert tools.update_item("US-1", "x", tool_context=ctx, as_a="receptionist")["ok"]
+    assert tools.update_item("R-1", "x", tool_context=ctx, impact="high", mitigation="pilot")["ok"]
+    assert tools.update_item("M-1", "x", tool_context=ctx, name="Pilot", includes=["US-1"], relative_size="L")["ok"]
+    assert "error" in tools.update_item("R-1", "x", tool_context=ctx, impact="huge")
+    spec = logic.load_spec(ctx.state)
+    assert spec.non_functional_requirements[0].category == "performance"
+    assert spec.user_stories[0].as_a == "receptionist"
+    assert (spec.risks[0].impact, spec.risks[0].mitigation) == ("high", "pilot")
+    assert (spec.milestones[0].name, spec.milestones[0].includes, spec.milestones[0].relative_size) == ("Pilot", ["US-1"], "L")
+
+
 # ── review ───────────────────────────────────────────────────────────────────
 
 def test_empty_spec_has_blocking_gaps(ctx):
@@ -158,6 +192,15 @@ def test_approval_blocked_by_open_questions_and_unconfirmed_items(ctx):
     assert publish(ctx, "approved", approved=True)["status"] == "approved"
 
 
+def test_approval_blocked_by_inferred_items_in_any_sourced_section(ctx):
+    minimal_complete_spec(ctx)
+    tools.add_stakeholder("Practice owner", "Signs off", "inferred", tool_context=ctx)
+    assert "error" in publish(ctx, approved=True)
+    tools.update_item("ST-1", "confirmed", tool_context=ctx, source="client")
+    tools.add_risk("Low adoption", "medium", "", tool_context=ctx)  # risks never block approval
+    assert publish(ctx, "approved", approved=True)["status"] == "approved"
+
+
 def test_editing_an_approved_spec_reopens_it(ctx):
     minimal_complete_spec(ctx)
     publish(ctx, "approved", approved=True)
@@ -176,3 +219,127 @@ def test_instruction_carries_live_spec_status(ctx):
 def test_agent_is_wired():
     assert app.root_agent is root_agent
     assert len(root_agent.tools) == len(tools.ALL_TOOLS)
+
+
+# ── approval requires explicit client authorization ──────────────────────────
+
+NOT_APPROVAL = [
+    # casual praise / agreement
+    "Looks good", "looks good!", "LGTM", "Great work, thanks.", "Sounds right to me.",
+    "I agree with all of it.", "Perfect, that's exactly what I wanted.",
+    "I approve of the direction, but tweak FR-2.",
+    # review requests
+    "Review PRD v1 before approval.", "Please review the PRD and check the assumptions.",
+    "Check that the spec is ready for approval.",
+    # readiness checks / questions
+    "Is it ready for approval?", "Is the spec ready?", "Can you approve it?", "Ready for approval?",
+    "What does approval involve?",
+    # negated, deferred, conditional
+    "Don't approve yet.", "Do not approve or publish the PRD yet.", "Not approved.",
+    "I'll approve once Q-2 is answered.", "I would approve if the budget fits.",
+    "Approve it after the review.", "We can approve it later.",
+    # the message that wrongly triggered approval in a live run
+    "The PRD looks good. Please hand this over to the architect to design the architecture.",
+    "", None,
+]
+
+EXPLICIT_APPROVAL = [
+    "I approve the PRD.", "I approve.", "Approved.", "Yes, approved", "Approve v2",
+    "Please approve the PRD.", "Go ahead and mark it approved.", "We hereby approve version 2.",
+    "I've signed off.", "We sign off on the spec.", "You have my approval.", "PRD approved - thanks!",
+    "Yes, I approve v3. Please publish it.", "I approve the PRD’s v2.",
+]
+
+
+@pytest.mark.parametrize("message", NOT_APPROVAL)
+def test_is_not_explicit_approval(message):
+    assert logic.is_explicit_approval(message) is False
+
+
+@pytest.mark.parametrize("message", EXPLICIT_APPROVAL)
+def test_is_explicit_approval(message):
+    assert logic.is_explicit_approval(message) is True
+
+
+@pytest.mark.parametrize("message", [
+    "Looks good!",
+    "Review PRD v1 before approval. Check every assumption is marked.",
+    "Is it ready for approval?",
+    "The PRD looks good. Please hand this over to the architect.",
+])
+def test_publish_refuses_approval_without_explicit_authorization(ctx, message):
+    minimal_complete_spec(ctx)
+    publish(ctx, "draft")
+    before = logic.load_spec(ctx.state).model_dump()
+
+    res = publish(ctx, "approve", approved=True, message=message)
+    assert "error" in res and "not an explicit approval" in res["error"]
+    assert logic.load_spec(ctx.state).model_dump() == before  # no version bump, no log entry
+    assert list(ctx.artifacts) == ["prd_v1.md"]
+
+
+def test_approval_refused_when_the_client_message_is_unavailable(ctx):
+    minimal_complete_spec(ctx)
+    ctx.user_content = None
+    res = asyncio.run(tools.publish_prd("v", True, tool_context=ctx))
+    assert "error" in res
+    assert logic.load_spec(ctx.state).meta.version == 0
+
+
+def test_explicit_approval_approves_and_keeps_versioning_and_history(ctx):
+    minimal_complete_spec(ctx)
+    publish(ctx, "first draft")
+    res = publish(ctx, "client approved", approved=True, message="Yes, I approve v1.")
+    assert (res["version"], res["status"]) == (2, "approved")
+    log = logic.load_spec(ctx.state).meta.change_log
+    assert [(c.version, c.summary) for c in log] == [(1, "first draft"), (2, "client approved")]
+    assert set(ctx.artifacts) == {"prd_v1.md", "prd_v2.md"}
+
+
+def test_publish_refused_when_client_says_not_to_publish(ctx):
+    minimal_complete_spec(ctx)
+    res = publish(ctx, "draft", message="Make those edits, but do not publish the PRD yet.")
+    assert "error" in res
+    assert logic.load_spec(ctx.state).meta.version == 0 and not ctx.artifacts
+
+
+NOT_PUBLISH_REQUEST = [
+    "Looks good", "Here are my answers.", "Thanks, that covers it.",
+    "Review the PRD and check the assumptions.", "Is it ready to publish?", "Should we publish it?",
+    "Publish it once Q-2 is answered.", "Don't publish yet.", "Make the edits but do not publish.",
+    "Please hand this over to the architect and publish it.", "Publish the architecture.",
+    "The PRD looks good. Please hand this over to the architect to design the technical "
+    "architecture, tech stack and project structure, and publish it.",
+    "", None,
+]
+
+PUBLISH_REQUEST = [
+    "Please publish the PRD.", "Publish it.", "Yes, publish v2", "Go ahead and publish the draft.",
+    "OK, republish the spec.", "I want you to publish the PRD now.", "Can you publish the PRD?",
+    "Thanks! Please publish it so I can review.", "I approve the PRD.",
+]
+
+
+@pytest.mark.parametrize("message", NOT_PUBLISH_REQUEST)
+def test_is_not_publish_request(message):
+    assert logic.is_explicit_publish_request(message) is False
+
+
+@pytest.mark.parametrize("message", PUBLISH_REQUEST)
+def test_is_publish_request(message):
+    assert logic.is_explicit_publish_request(message) is True
+
+
+@pytest.mark.parametrize("message", ["Looks good!", "Here are my answers.",
+                                     "Please hand this over to the architect and publish it."])
+def test_draft_publish_refused_without_explicit_request(ctx, message):
+    minimal_complete_spec(ctx)
+    res = publish(ctx, "draft", message=message)
+    assert "error" in res and "not explicitly asked" in res["error"]
+    assert logic.load_spec(ctx.state).meta.version == 0 and not ctx.artifacts
+
+
+def test_draft_publish_on_explicit_request(ctx):
+    minimal_complete_spec(ctx)
+    res = publish(ctx, "draft", message="Please publish the PRD so I can review it.")
+    assert (res["version"], res["status"]) == (1, "in_review")

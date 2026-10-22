@@ -43,3 +43,40 @@ agent, ensuring zero loss of requirements context during handoff. Technical desi
 choices, components, and project scaffolding are stored in `state["tech_design"]` and published
 as `architecture_v1.md` artifacts.
 
+## 2026-10-22 — Model routing, Dev agent fixes, stricter approval
+
+**Model routing in `shared/models.py`.** A model name without `/` goes to Gemini; with `/` it
+goes to NVIDIA's OpenAI-compatible endpoint through LiteLLM (dev-tier fallback for Gemini
+rate limits). `DEV_MODEL` defaults to `PM_MODEL`. Run standalone, `dev_agent` falls back to
+`pm_agent/.env` for keys.
+
+**Architecture is tied to a PRD version.** `TechDesign.based_on_prd_version` is set on
+publish; publishing needs a published PRD, and the Dev status line flags the design STALE
+when the PRD has moved on. Components carry `addresses` (FR-/NFR- IDs, validated), and the
+traceability section maps each requirement to the components that deliver it.
+
+**Dev design is revisable.** Components (by name) and scaffold entries (by path) upsert like
+the tech stack; `remove_design_item` removes any of them.
+
+**Approval covers every sourced section except risks.** Inferred stakeholders, metrics,
+constraints, and exclusions now block approval too. Risks are exempt: they are the PM's own
+reading by nature. `update_item` covers all editable fields, and milestone `includes` are
+validated when written, not only at review.
+
+**Standalone `dev_agent` app uses a clone**, because the original is the PM's sub-agent and an
+agent can have only one parent.
+
+**Publishing and approval need explicit client words, checked in code.** `publish_prd` reads
+the client message that started the turn (`tool_context.user_content`). A draft publish needs
+an explicit request ("please publish the PRD"); `mark_approved=True` needs an explicit approval
+("I approve the PRD"). Praise, agreement, review requests, readiness questions, conditional or
+negated wording, and requests to publish the architect's work are refused, and "do not publish"
+blocks publishing outright. The matcher (`spec_logic.is_explicit_approval` /
+`is_explicit_publish_request`) is deliberately strict: a false refusal costs one confirmation
+question, a false approval signs off a spec the client never approved. The PM now asks before
+publishing instead of publishing proactively. Versioning and change history are unchanged.
+
+**Simplest stack by default, checked in code.** Heavy infrastructure (caches, queues, brokers,
+Kubernetes, search engines, microservices, CDNs) is refused unless the rationale or
+`addresses` cites a real FR-/NFR-/C- ID. "None" placeholder stack entries are refused; the
+agent leaves the layer out and explains the omission in the publish summary.
