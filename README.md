@@ -21,7 +21,7 @@ pm_agent/               # Product Manager agent
 ├── prompt.py           # PM role & dev delegation guidelines
 ├── tools.py            # 14 tools writing to state["spec"]
 ├── spec_logic.py       # Deterministic core: IDs, review checks, PRD rendering
-├── schema.py           # RequirementsSpec handoff contract
+├── schema.py           # Re-exports shared/spec.py
 ├── playbooks.yaml      # Engagement types & discovery areas
 └── config.py           # Model and limits from environment
 
@@ -34,8 +34,13 @@ dev_agent/              # Developer & Technical Architect agent
 ├── schema.py           # TechDesign schemas
 └── config.py           # Dev agent configuration
 
-tests/                  # 189 tests (3 start the real MCP server; skip with AGENTCORP_SKIP_MCP_TESTS=1), no API key needed
+tests/                  # 210 tests, no model calls or API key (3 start the real MCP server;
+                        #   skip those with AGENTCORP_SKIP_MCP_TESTS=1)
 shared/models.py        # Model routing: Gemini, or NVIDIA via LiteLLM
+shared/spec.py          # RequirementsSpec: the handoff contract every agent reads
+shared/policy.py        # What wording counts as "publish" / "approve"
+evals/                  # adk eval suite: cases, config, custom metrics, runner
+scripts/vertex_preflight.py  # Checks the Vertex AI setup step by step
 docs/decisions.md       # Architecture decision log
 ```
 
@@ -68,6 +73,36 @@ first run downloads the package.
 Flow: publish the PRD, ask for the architecture (published as `architecture_vN.md`), then ask
 the Dev agent to **build/implement** it. It calls `implement_scaffold`, which writes only paths
 from the published scaffold and reads each file back. Nothing is run, installed, or tested.
+
+## Evaluate the agents (`adk eval`)
+
+Unit tests check the rules in code. Evals check whether the **model** follows them, using
+real model calls (they cost tokens and take a few minutes):
+
+```powershell
+.venv\Scripts\python -m evals.run                 # or: python -m evals.run explicit_approval
+```
+
+- `evals/build_evalset.py` generates the 7 cases (rerun it after schema changes:
+  `python -m evals.build_evalset`). Starting states come from the real PM tools.
+- Metrics (`evals/test_config.json`): `tool_trajectory_avg_score` (tool names, in order) and
+  three custom metrics in `evals/metrics.py`: `key_args_match`, `publish_policy`,
+  `simple_stack_policy`.
+
+## Move to Gemini on Vertex AI
+
+```powershell
+winget install Google.CloudSDK                      # then open a new terminal
+gcloud auth login
+gcloud projects create <project-id>                 # then link billing in the console
+gcloud config set project <project-id>
+gcloud services enable aiplatform.googleapis.com
+gcloud auth application-default login
+```
+
+In `pm_agent/.env`: set `GOOGLE_GENAI_USE_VERTEXAI=TRUE`, `GOOGLE_CLOUD_PROJECT`,
+`GOOGLE_CLOUD_LOCATION`, a Gemini `PM_MODEL`, and comment out the NVIDIA one. Then run
+`.venv\Scripts\python scripts\vertex_preflight.py` and rerun the evals.
 
 ## Test
 

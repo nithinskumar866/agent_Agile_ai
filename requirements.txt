@@ -1,4 +1,4 @@
-google-adk[mcp]==2.11.0   # [mcp] pulls the MCP Python SDK (tested: mcp 2.3.0)
+google-adk[mcp,eval]==2.11.0   # mcp: MCP SDK (tested 2.3.0); eval: adk eval + Vertex AI SDK
 litellm>=1.105
 pyyaml>=6.0
 pytest>=9.0

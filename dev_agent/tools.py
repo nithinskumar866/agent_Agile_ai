@@ -10,6 +10,8 @@ from typing import List, Literal, Optional
 from google.adk.tools import ToolContext
 from google.genai import types
 
+from shared.spec import load_spec
+
 from . import logic, workspace
 from .schema import ArchitectureComponent, GeneratedFile, ImplementedFile, ScaffoldEntry, TechStackItem
 
@@ -23,8 +25,9 @@ def _changed(design, note: str) -> None:
 
 
 def _load_spec_safely(state: dict):
-    from pm_agent import spec_logic as pm_logic
-    return pm_logic.load_spec(state)
+    # Via shared, never pm_agent: importing pm_agent builds a second agent tree when
+    # adk eval has already loaded it under another module name.
+    return load_spec(state)
 
 
 def inspect_spec(tool_context: ToolContext) -> dict:

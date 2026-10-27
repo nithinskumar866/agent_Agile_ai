@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pm_agent.schema import RequirementsSpec
+    from shared.spec import RequirementsSpec
 
 from .config import TECH_DESIGN_STATE_KEY
 from .schema import ArchitectureComponent, ScaffoldEntry, TechDesign, TechStackItem

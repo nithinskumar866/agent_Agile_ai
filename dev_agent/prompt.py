@@ -5,6 +5,8 @@ is injected on every turn.
 """
 
 from google.adk.agents.readonly_context import ReadonlyContext
+from shared.spec import load_spec
+
 from . import logic
 
 ROLE = """\
@@ -65,6 +67,5 @@ production-ready technical architecture, technology stack recommendation, and pr
 
 def instruction(ctx: ReadonlyContext) -> str:
     design = logic.load_tech_design(ctx.state)
-    from pm_agent import spec_logic as pm_logic
-    spec = pm_logic.load_spec(ctx.state)
+    spec = load_spec(ctx.state)
     return f"{ROLE}\n# Current Technical Status\n{logic.status_line(design, spec)}\n"

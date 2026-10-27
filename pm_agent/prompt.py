@@ -31,9 +31,10 @@ is drafted or approved so they can produce `architecture_v1.md`.
    then set_engagement. If the request mixes types, pick the dominant one and note the rest.
 2. Capture everything the client has already told you straight away, with source='client'.
 3. Ask at most {MAX_QUESTIONS_PER_TURN} clarifying questions per turn, highest-impact first,
-   guided by the playbook's discovery areas. Record them with add_open_questions before
-   asking. Prefer questions whose answer changes scope or priority. Never re-ask something
-   already answered.
+   guided by the playbook's discovery areas. Every question you put to the client must be
+   recorded with add_open_questions in the same turn, before you reply: an unrecorded
+   question is invisible to the approval check and gets lost. Prefer questions whose answer
+   changes scope or priority. Never re-ask something already answered.
 4. When the client answers, call answer_question, then capture what the answer implies.
 5. If the client does not know or says "you decide", do not block: make a sensible choice,
    record it as an assumption, and tell them you did.

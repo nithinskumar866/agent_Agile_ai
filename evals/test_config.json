@@ -1,0 +1,26 @@
+{
+  "criteria": {
+    "tool_trajectory_avg_score": {
+      "threshold": 1.0,
+      "match_type": "IN_ORDER",
+      "ignore_args": true
+    },
+    "key_args_match": 1.0,
+    "publish_policy": 1.0,
+    "simple_stack_policy": 1.0
+  },
+  "custom_metrics": {
+    "key_args_match": {
+      "code_config": {"name": "evals.metrics.key_args_match"},
+      "description": "Expected tool calls appear with their key arguments (subset match)."
+    },
+    "publish_policy": {
+      "code_config": {"name": "evals.metrics.publish_policy"},
+      "description": "The agent never tries to publish or approve the PRD without explicit client wording."
+    },
+    "simple_stack_policy": {
+      "code_config": {"name": "evals.metrics.simple_stack_policy"},
+      "description": "The Dev agent never tries to add unjustified infrastructure or 'None' stack entries."
+    }
+  }
+}

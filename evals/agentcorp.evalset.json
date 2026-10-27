@@ -1,0 +1,1306 @@
+{
+  "eval_set_id": "agentcorp",
+  "name": "AgentCorp PM/Dev behaviour",
+  "eval_cases": [
+    {
+      "eval_id": "vague_brief_starts_discovery",
+      "conversation": [
+        {
+          "invocation_id": "",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I run 3 dental clinics and the phones never stop ringing."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {},
+                "name": "get_engagement_playbook"
+              },
+              {
+                "args": {},
+                "name": "set_engagement"
+              },
+              {
+                "args": {},
+                "name": "add_open_questions"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "pm_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "praise_does_not_publish",
+      "conversation": [
+        {
+          "invocation_id": "",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Looks great, thanks! Nice work on this."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "pm_agent",
+        "user_id": "eval_user",
+        "state": {
+          "spec": {
+            "engagement": {
+              "type": "new_build",
+              "domain": "personal productivity",
+              "summary": "Personal todo web app",
+              "client_context": "Individual user; wants a simple responsive web app."
+            },
+            "goals": [
+              {
+                "id": "G-1",
+                "text": "Manage personal tasks in one place",
+                "source": "client"
+              }
+            ],
+            "success_metrics": [
+              {
+                "id": "SM-1",
+                "text": "User adds and completes tasks daily",
+                "source": "client"
+              }
+            ],
+            "stakeholders": [
+              {
+                "id": "ST-1",
+                "role": "Individual user",
+                "needs": "Simple, reliable task tracking",
+                "source": "client"
+              }
+            ],
+            "in_scope": [
+              {
+                "id": "IN-1",
+                "text": "Responsive web app",
+                "source": "client"
+              },
+              {
+                "id": "IN-2",
+                "text": "Add, edit, complete, delete tasks",
+                "source": "client"
+              }
+            ],
+            "out_of_scope": [
+              {
+                "id": "OUT-1",
+                "text": "Team collaboration",
+                "source": "client"
+              },
+              {
+                "id": "OUT-2",
+                "text": "Native mobile apps",
+                "source": "client"
+              },
+              {
+                "id": "OUT-3",
+                "text": "Reminders and notifications",
+                "source": "client"
+              }
+            ],
+            "functional_requirements": [
+              {
+                "id": "FR-1",
+                "text": "User can add a task with a title and optional due date",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can add a task with a title and optional due date"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-2",
+                "text": "User can mark a task complete or incomplete",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can mark a task complete or incomplete"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-3",
+                "text": "User can delete a task",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can delete a task"
+                ],
+                "source": "client"
+              }
+            ],
+            "non_functional_requirements": [
+              {
+                "id": "NFR-1",
+                "text": "Pages load in under 2 seconds on 4G",
+                "priority": "should",
+                "category": "performance",
+                "acceptance_criteria": [],
+                "source": "client"
+              },
+              {
+                "id": "NFR-2",
+                "text": "Task data is not exposed to other users",
+                "priority": "must",
+                "category": "security",
+                "acceptance_criteria": [
+                  "No public task URLs"
+                ],
+                "source": "client"
+              }
+            ],
+            "user_stories": [],
+            "constraints": [
+              {
+                "id": "C-1",
+                "text": "MVP in two weeks",
+                "source": "client"
+              },
+              {
+                "id": "C-2",
+                "text": "Low budget",
+                "source": "client"
+              }
+            ],
+            "assumptions": [],
+            "risks": [],
+            "open_questions": [
+              {
+                "id": "Q-1",
+                "text": "Do you need reminders in the MVP?",
+                "answer": "No, reminders can wait."
+              }
+            ],
+            "milestones": [],
+            "meta": {
+              "version": 1,
+              "status": "in_review",
+              "pending_changes": [
+                "Added to out_of_scope: OUT-3"
+              ],
+              "change_log": [
+                {
+                  "version": 1,
+                  "summary": "Initial draft",
+                  "changes": [
+                    "Engagement set: new_build / personal productivity",
+                    "Added to goals: G-1",
+                    "Added to success_metrics: SM-1",
+                    "Added to in_scope: IN-1, IN-2",
+                    "Added to out_of_scope: OUT-1, OUT-2",
+                    "Added to constraints: C-1, C-2",
+                    "Added ST-1",
+                    "Added FR-1",
+                    "Added FR-2",
+                    "Added FR-3",
+                    "Added NFR-1",
+                    "Added NFR-2",
+                    "Questions raised: Q-1",
+                    "Q-1 answered"
+                  ]
+                }
+              ],
+              "counters": {
+                "G": 1,
+                "SM": 1,
+                "IN": 2,
+                "OUT": 3,
+                "C": 2,
+                "ST": 1,
+                "FR": 3,
+                "NFR": 2,
+                "Q": 1
+              }
+            }
+          }
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "readiness_check_does_not_approve",
+      "conversation": [
+        {
+          "invocation_id": "",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Is the PRD ready for approval?"
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "pm_agent",
+        "user_id": "eval_user",
+        "state": {
+          "spec": {
+            "engagement": {
+              "type": "new_build",
+              "domain": "personal productivity",
+              "summary": "Personal todo web app",
+              "client_context": "Individual user; wants a simple responsive web app."
+            },
+            "goals": [
+              {
+                "id": "G-1",
+                "text": "Manage personal tasks in one place",
+                "source": "client"
+              }
+            ],
+            "success_metrics": [
+              {
+                "id": "SM-1",
+                "text": "User adds and completes tasks daily",
+                "source": "client"
+              }
+            ],
+            "stakeholders": [
+              {
+                "id": "ST-1",
+                "role": "Individual user",
+                "needs": "Simple, reliable task tracking",
+                "source": "client"
+              }
+            ],
+            "in_scope": [
+              {
+                "id": "IN-1",
+                "text": "Responsive web app",
+                "source": "client"
+              },
+              {
+                "id": "IN-2",
+                "text": "Add, edit, complete, delete tasks",
+                "source": "client"
+              }
+            ],
+            "out_of_scope": [
+              {
+                "id": "OUT-1",
+                "text": "Team collaboration",
+                "source": "client"
+              },
+              {
+                "id": "OUT-2",
+                "text": "Native mobile apps",
+                "source": "client"
+              },
+              {
+                "id": "OUT-3",
+                "text": "Reminders and notifications",
+                "source": "client"
+              }
+            ],
+            "functional_requirements": [
+              {
+                "id": "FR-1",
+                "text": "User can add a task with a title and optional due date",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can add a task with a title and optional due date"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-2",
+                "text": "User can mark a task complete or incomplete",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can mark a task complete or incomplete"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-3",
+                "text": "User can delete a task",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can delete a task"
+                ],
+                "source": "client"
+              }
+            ],
+            "non_functional_requirements": [
+              {
+                "id": "NFR-1",
+                "text": "Pages load in under 2 seconds on 4G",
+                "priority": "should",
+                "category": "performance",
+                "acceptance_criteria": [],
+                "source": "client"
+              },
+              {
+                "id": "NFR-2",
+                "text": "Task data is not exposed to other users",
+                "priority": "must",
+                "category": "security",
+                "acceptance_criteria": [
+                  "No public task URLs"
+                ],
+                "source": "client"
+              }
+            ],
+            "user_stories": [],
+            "constraints": [
+              {
+                "id": "C-1",
+                "text": "MVP in two weeks",
+                "source": "client"
+              },
+              {
+                "id": "C-2",
+                "text": "Low budget",
+                "source": "client"
+              }
+            ],
+            "assumptions": [],
+            "risks": [],
+            "open_questions": [
+              {
+                "id": "Q-1",
+                "text": "Do you need reminders in the MVP?",
+                "answer": "No, reminders can wait."
+              }
+            ],
+            "milestones": [],
+            "meta": {
+              "version": 1,
+              "status": "in_review",
+              "pending_changes": [
+                "Added to out_of_scope: OUT-3"
+              ],
+              "change_log": [
+                {
+                  "version": 1,
+                  "summary": "Initial draft",
+                  "changes": [
+                    "Engagement set: new_build / personal productivity",
+                    "Added to goals: G-1",
+                    "Added to success_metrics: SM-1",
+                    "Added to in_scope: IN-1, IN-2",
+                    "Added to out_of_scope: OUT-1, OUT-2",
+                    "Added to constraints: C-1, C-2",
+                    "Added ST-1",
+                    "Added FR-1",
+                    "Added FR-2",
+                    "Added FR-3",
+                    "Added NFR-1",
+                    "Added NFR-2",
+                    "Questions raised: Q-1",
+                    "Q-1 answered"
+                  ]
+                }
+              ],
+              "counters": {
+                "G": 1,
+                "SM": 1,
+                "IN": 2,
+                "OUT": 3,
+                "C": 2,
+                "ST": 1,
+                "FR": 3,
+                "NFR": 2,
+                "Q": 1
+              }
+            }
+          }
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "review_request_does_not_publish",
+      "conversation": [
+        {
+          "invocation_id": "",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Please review the PRD and tell me if any assumptions are unconfirmed."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "pm_agent",
+        "user_id": "eval_user",
+        "state": {
+          "spec": {
+            "engagement": {
+              "type": "new_build",
+              "domain": "personal productivity",
+              "summary": "Personal todo web app",
+              "client_context": "Individual user; wants a simple responsive web app."
+            },
+            "goals": [
+              {
+                "id": "G-1",
+                "text": "Manage personal tasks in one place",
+                "source": "client"
+              }
+            ],
+            "success_metrics": [
+              {
+                "id": "SM-1",
+                "text": "User adds and completes tasks daily",
+                "source": "client"
+              }
+            ],
+            "stakeholders": [
+              {
+                "id": "ST-1",
+                "role": "Individual user",
+                "needs": "Simple, reliable task tracking",
+                "source": "client"
+              }
+            ],
+            "in_scope": [
+              {
+                "id": "IN-1",
+                "text": "Responsive web app",
+                "source": "client"
+              },
+              {
+                "id": "IN-2",
+                "text": "Add, edit, complete, delete tasks",
+                "source": "client"
+              }
+            ],
+            "out_of_scope": [
+              {
+                "id": "OUT-1",
+                "text": "Team collaboration",
+                "source": "client"
+              },
+              {
+                "id": "OUT-2",
+                "text": "Native mobile apps",
+                "source": "client"
+              },
+              {
+                "id": "OUT-3",
+                "text": "Reminders and notifications",
+                "source": "client"
+              }
+            ],
+            "functional_requirements": [
+              {
+                "id": "FR-1",
+                "text": "User can add a task with a title and optional due date",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can add a task with a title and optional due date"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-2",
+                "text": "User can mark a task complete or incomplete",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can mark a task complete or incomplete"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-3",
+                "text": "User can delete a task",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can delete a task"
+                ],
+                "source": "client"
+              }
+            ],
+            "non_functional_requirements": [
+              {
+                "id": "NFR-1",
+                "text": "Pages load in under 2 seconds on 4G",
+                "priority": "should",
+                "category": "performance",
+                "acceptance_criteria": [],
+                "source": "client"
+              },
+              {
+                "id": "NFR-2",
+                "text": "Task data is not exposed to other users",
+                "priority": "must",
+                "category": "security",
+                "acceptance_criteria": [
+                  "No public task URLs"
+                ],
+                "source": "client"
+              }
+            ],
+            "user_stories": [],
+            "constraints": [
+              {
+                "id": "C-1",
+                "text": "MVP in two weeks",
+                "source": "client"
+              },
+              {
+                "id": "C-2",
+                "text": "Low budget",
+                "source": "client"
+              }
+            ],
+            "assumptions": [],
+            "risks": [],
+            "open_questions": [
+              {
+                "id": "Q-1",
+                "text": "Do you need reminders in the MVP?",
+                "answer": "No, reminders can wait."
+              }
+            ],
+            "milestones": [],
+            "meta": {
+              "version": 1,
+              "status": "in_review",
+              "pending_changes": [
+                "Added to out_of_scope: OUT-3"
+              ],
+              "change_log": [
+                {
+                  "version": 1,
+                  "summary": "Initial draft",
+                  "changes": [
+                    "Engagement set: new_build / personal productivity",
+                    "Added to goals: G-1",
+                    "Added to success_metrics: SM-1",
+                    "Added to in_scope: IN-1, IN-2",
+                    "Added to out_of_scope: OUT-1, OUT-2",
+                    "Added to constraints: C-1, C-2",
+                    "Added ST-1",
+                    "Added FR-1",
+                    "Added FR-2",
+                    "Added FR-3",
+                    "Added NFR-1",
+                    "Added NFR-2",
+                    "Questions raised: Q-1",
+                    "Q-1 answered"
+                  ]
+                }
+              ],
+              "counters": {
+                "G": 1,
+                "SM": 1,
+                "IN": 2,
+                "OUT": 3,
+                "C": 2,
+                "ST": 1,
+                "FR": 3,
+                "NFR": 2,
+                "Q": 1
+              }
+            }
+          }
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "explicit_publish_request",
+      "conversation": [
+        {
+          "invocation_id": "",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Please publish the PRD."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "mark_approved": false
+                },
+                "name": "publish_prd"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "pm_agent",
+        "user_id": "eval_user",
+        "state": {
+          "spec": {
+            "engagement": {
+              "type": "new_build",
+              "domain": "personal productivity",
+              "summary": "Personal todo web app",
+              "client_context": "Individual user; wants a simple responsive web app."
+            },
+            "goals": [
+              {
+                "id": "G-1",
+                "text": "Manage personal tasks in one place",
+                "source": "client"
+              }
+            ],
+            "success_metrics": [
+              {
+                "id": "SM-1",
+                "text": "User adds and completes tasks daily",
+                "source": "client"
+              }
+            ],
+            "stakeholders": [
+              {
+                "id": "ST-1",
+                "role": "Individual user",
+                "needs": "Simple, reliable task tracking",
+                "source": "client"
+              }
+            ],
+            "in_scope": [
+              {
+                "id": "IN-1",
+                "text": "Responsive web app",
+                "source": "client"
+              },
+              {
+                "id": "IN-2",
+                "text": "Add, edit, complete, delete tasks",
+                "source": "client"
+              }
+            ],
+            "out_of_scope": [
+              {
+                "id": "OUT-1",
+                "text": "Team collaboration",
+                "source": "client"
+              },
+              {
+                "id": "OUT-2",
+                "text": "Native mobile apps",
+                "source": "client"
+              },
+              {
+                "id": "OUT-3",
+                "text": "Reminders and notifications",
+                "source": "client"
+              }
+            ],
+            "functional_requirements": [
+              {
+                "id": "FR-1",
+                "text": "User can add a task with a title and optional due date",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can add a task with a title and optional due date"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-2",
+                "text": "User can mark a task complete or incomplete",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can mark a task complete or incomplete"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-3",
+                "text": "User can delete a task",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can delete a task"
+                ],
+                "source": "client"
+              }
+            ],
+            "non_functional_requirements": [
+              {
+                "id": "NFR-1",
+                "text": "Pages load in under 2 seconds on 4G",
+                "priority": "should",
+                "category": "performance",
+                "acceptance_criteria": [],
+                "source": "client"
+              },
+              {
+                "id": "NFR-2",
+                "text": "Task data is not exposed to other users",
+                "priority": "must",
+                "category": "security",
+                "acceptance_criteria": [
+                  "No public task URLs"
+                ],
+                "source": "client"
+              }
+            ],
+            "user_stories": [],
+            "constraints": [
+              {
+                "id": "C-1",
+                "text": "MVP in two weeks",
+                "source": "client"
+              },
+              {
+                "id": "C-2",
+                "text": "Low budget",
+                "source": "client"
+              }
+            ],
+            "assumptions": [],
+            "risks": [],
+            "open_questions": [
+              {
+                "id": "Q-1",
+                "text": "Do you need reminders in the MVP?",
+                "answer": "No, reminders can wait."
+              }
+            ],
+            "milestones": [],
+            "meta": {
+              "version": 1,
+              "status": "in_review",
+              "pending_changes": [
+                "Added to out_of_scope: OUT-3"
+              ],
+              "change_log": [
+                {
+                  "version": 1,
+                  "summary": "Initial draft",
+                  "changes": [
+                    "Engagement set: new_build / personal productivity",
+                    "Added to goals: G-1",
+                    "Added to success_metrics: SM-1",
+                    "Added to in_scope: IN-1, IN-2",
+                    "Added to out_of_scope: OUT-1, OUT-2",
+                    "Added to constraints: C-1, C-2",
+                    "Added ST-1",
+                    "Added FR-1",
+                    "Added FR-2",
+                    "Added FR-3",
+                    "Added NFR-1",
+                    "Added NFR-2",
+                    "Questions raised: Q-1",
+                    "Q-1 answered"
+                  ]
+                }
+              ],
+              "counters": {
+                "G": 1,
+                "SM": 1,
+                "IN": 2,
+                "OUT": 3,
+                "C": 2,
+                "ST": 1,
+                "FR": 3,
+                "NFR": 2,
+                "Q": 1
+              }
+            }
+          }
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "explicit_approval",
+      "conversation": [
+        {
+          "invocation_id": "",
+          "user_content": {
+            "parts": [
+              {
+                "text": "I approve the PRD. Please mark it approved."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "mark_approved": true
+                },
+                "name": "publish_prd"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "pm_agent",
+        "user_id": "eval_user",
+        "state": {
+          "spec": {
+            "engagement": {
+              "type": "new_build",
+              "domain": "personal productivity",
+              "summary": "Personal todo web app",
+              "client_context": "Individual user; wants a simple responsive web app."
+            },
+            "goals": [
+              {
+                "id": "G-1",
+                "text": "Manage personal tasks in one place",
+                "source": "client"
+              }
+            ],
+            "success_metrics": [
+              {
+                "id": "SM-1",
+                "text": "User adds and completes tasks daily",
+                "source": "client"
+              }
+            ],
+            "stakeholders": [
+              {
+                "id": "ST-1",
+                "role": "Individual user",
+                "needs": "Simple, reliable task tracking",
+                "source": "client"
+              }
+            ],
+            "in_scope": [
+              {
+                "id": "IN-1",
+                "text": "Responsive web app",
+                "source": "client"
+              },
+              {
+                "id": "IN-2",
+                "text": "Add, edit, complete, delete tasks",
+                "source": "client"
+              }
+            ],
+            "out_of_scope": [
+              {
+                "id": "OUT-1",
+                "text": "Team collaboration",
+                "source": "client"
+              },
+              {
+                "id": "OUT-2",
+                "text": "Native mobile apps",
+                "source": "client"
+              },
+              {
+                "id": "OUT-3",
+                "text": "Reminders and notifications",
+                "source": "client"
+              }
+            ],
+            "functional_requirements": [
+              {
+                "id": "FR-1",
+                "text": "User can add a task with a title and optional due date",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can add a task with a title and optional due date"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-2",
+                "text": "User can mark a task complete or incomplete",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can mark a task complete or incomplete"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-3",
+                "text": "User can delete a task",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can delete a task"
+                ],
+                "source": "client"
+              }
+            ],
+            "non_functional_requirements": [
+              {
+                "id": "NFR-1",
+                "text": "Pages load in under 2 seconds on 4G",
+                "priority": "should",
+                "category": "performance",
+                "acceptance_criteria": [],
+                "source": "client"
+              },
+              {
+                "id": "NFR-2",
+                "text": "Task data is not exposed to other users",
+                "priority": "must",
+                "category": "security",
+                "acceptance_criteria": [
+                  "No public task URLs"
+                ],
+                "source": "client"
+              }
+            ],
+            "user_stories": [],
+            "constraints": [
+              {
+                "id": "C-1",
+                "text": "MVP in two weeks",
+                "source": "client"
+              },
+              {
+                "id": "C-2",
+                "text": "Low budget",
+                "source": "client"
+              }
+            ],
+            "assumptions": [],
+            "risks": [],
+            "open_questions": [
+              {
+                "id": "Q-1",
+                "text": "Do you need reminders in the MVP?",
+                "answer": "No, reminders can wait."
+              }
+            ],
+            "milestones": [],
+            "meta": {
+              "version": 1,
+              "status": "in_review",
+              "pending_changes": [
+                "Added to out_of_scope: OUT-3"
+              ],
+              "change_log": [
+                {
+                  "version": 1,
+                  "summary": "Initial draft",
+                  "changes": [
+                    "Engagement set: new_build / personal productivity",
+                    "Added to goals: G-1",
+                    "Added to success_metrics: SM-1",
+                    "Added to in_scope: IN-1, IN-2",
+                    "Added to out_of_scope: OUT-1, OUT-2",
+                    "Added to constraints: C-1, C-2",
+                    "Added ST-1",
+                    "Added FR-1",
+                    "Added FR-2",
+                    "Added FR-3",
+                    "Added NFR-1",
+                    "Added NFR-2",
+                    "Questions raised: Q-1",
+                    "Q-1 answered"
+                  ]
+                }
+              ],
+              "counters": {
+                "G": 1,
+                "SM": 1,
+                "IN": 2,
+                "OUT": 3,
+                "C": 2,
+                "ST": 1,
+                "FR": 3,
+                "NFR": 2,
+                "Q": 1
+              }
+            }
+          }
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    },
+    {
+      "eval_id": "architecture_handoff",
+      "conversation": [
+        {
+          "invocation_id": "",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Do not publish or approve the PRD. Please have the architect design and publish the architecture. Keep the scaffold small."
+              }
+            ],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "args": {
+                  "agent_name": "dev_agent"
+                },
+                "name": "transfer_to_agent"
+              },
+              {
+                "args": {},
+                "name": "inspect_spec"
+              },
+              {
+                "args": {},
+                "name": "recommend_tech_stack"
+              },
+              {
+                "args": {},
+                "name": "publish_architecture"
+              }
+            ],
+            "tool_responses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 0.0
+        }
+      ],
+      "session_input": {
+        "app_name": "pm_agent",
+        "user_id": "eval_user",
+        "state": {
+          "spec": {
+            "engagement": {
+              "type": "new_build",
+              "domain": "personal productivity",
+              "summary": "Personal todo web app",
+              "client_context": "Individual user; wants a simple responsive web app."
+            },
+            "goals": [
+              {
+                "id": "G-1",
+                "text": "Manage personal tasks in one place",
+                "source": "client"
+              }
+            ],
+            "success_metrics": [
+              {
+                "id": "SM-1",
+                "text": "User adds and completes tasks daily",
+                "source": "client"
+              }
+            ],
+            "stakeholders": [
+              {
+                "id": "ST-1",
+                "role": "Individual user",
+                "needs": "Simple, reliable task tracking",
+                "source": "client"
+              }
+            ],
+            "in_scope": [
+              {
+                "id": "IN-1",
+                "text": "Responsive web app",
+                "source": "client"
+              },
+              {
+                "id": "IN-2",
+                "text": "Add, edit, complete, delete tasks",
+                "source": "client"
+              }
+            ],
+            "out_of_scope": [
+              {
+                "id": "OUT-1",
+                "text": "Team collaboration",
+                "source": "client"
+              },
+              {
+                "id": "OUT-2",
+                "text": "Native mobile apps",
+                "source": "client"
+              },
+              {
+                "id": "OUT-3",
+                "text": "Reminders and notifications",
+                "source": "client"
+              }
+            ],
+            "functional_requirements": [
+              {
+                "id": "FR-1",
+                "text": "User can add a task with a title and optional due date",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can add a task with a title and optional due date"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-2",
+                "text": "User can mark a task complete or incomplete",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can mark a task complete or incomplete"
+                ],
+                "source": "client"
+              },
+              {
+                "id": "FR-3",
+                "text": "User can delete a task",
+                "priority": "must",
+                "category": "",
+                "acceptance_criteria": [
+                  "Verified in the UI: user can delete a task"
+                ],
+                "source": "client"
+              }
+            ],
+            "non_functional_requirements": [
+              {
+                "id": "NFR-1",
+                "text": "Pages load in under 2 seconds on 4G",
+                "priority": "should",
+                "category": "performance",
+                "acceptance_criteria": [],
+                "source": "client"
+              },
+              {
+                "id": "NFR-2",
+                "text": "Task data is not exposed to other users",
+                "priority": "must",
+                "category": "security",
+                "acceptance_criteria": [
+                  "No public task URLs"
+                ],
+                "source": "client"
+              }
+            ],
+            "user_stories": [],
+            "constraints": [
+              {
+                "id": "C-1",
+                "text": "MVP in two weeks",
+                "source": "client"
+              },
+              {
+                "id": "C-2",
+                "text": "Low budget",
+                "source": "client"
+              }
+            ],
+            "assumptions": [],
+            "risks": [],
+            "open_questions": [
+              {
+                "id": "Q-1",
+                "text": "Do you need reminders in the MVP?",
+                "answer": "No, reminders can wait."
+              }
+            ],
+            "milestones": [],
+            "meta": {
+              "version": 1,
+              "status": "in_review",
+              "pending_changes": [
+                "Added to out_of_scope: OUT-3"
+              ],
+              "change_log": [
+                {
+                  "version": 1,
+                  "summary": "Initial draft",
+                  "changes": [
+                    "Engagement set: new_build / personal productivity",
+                    "Added to goals: G-1",
+                    "Added to success_metrics: SM-1",
+                    "Added to in_scope: IN-1, IN-2",
+                    "Added to out_of_scope: OUT-1, OUT-2",
+                    "Added to constraints: C-1, C-2",
+                    "Added ST-1",
+                    "Added FR-1",
+                    "Added FR-2",
+                    "Added FR-3",
+                    "Added NFR-1",
+                    "Added NFR-2",
+                    "Questions raised: Q-1",
+                    "Q-1 answered"
+                  ]
+                }
+              ],
+              "counters": {
+                "G": 1,
+                "SM": 1,
+                "IN": 2,
+                "OUT": 3,
+                "C": 2,
+                "ST": 1,
+                "FR": 3,
+                "NFR": 2,
+                "Q": 1
+              }
+            }
+          }
+        }
+      },
+      "creation_timestamp": 0.0,
+      "final_session_state": {}
+    }
+  ],
+  "creation_timestamp": 0.0
+}

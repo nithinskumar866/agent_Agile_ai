@@ -16,4 +16,4 @@ COMPACTION_KEEP_EVENTS = int(os.getenv("PM_COMPACTION_KEEP_EVENTS", "20"))
 # How many clarifying questions to ask per turn.
 MAX_QUESTIONS_PER_TURN = int(os.getenv("PM_MAX_QUESTIONS", "5"))
 
-SPEC_STATE_KEY = "spec"
+from shared.spec import SPEC_STATE_KEY  # noqa: E402,F401 — kept for existing imports
