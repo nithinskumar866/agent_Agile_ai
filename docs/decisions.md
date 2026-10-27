@@ -80,3 +80,31 @@ publishing instead of publishing proactively. Versioning and change history are 
 Kubernetes, search engines, microservices, CDNs) is refused unless the rationale or
 `addresses` cites a real FR-/NFR-/C- ID. "None" placeholder stack entries are refused; the
 agent leaves the layer out and explains the omission in the publish summary.
+
+## 2026-10-23 — Phase 2.5: Dev agent writes code through the filesystem MCP server
+
+**Official server, pinned.** `@modelcontextprotocol/server-filesystem@2026.8.31`, started with
+`npx` over stdio. The newest release (2.0.0) requires Node 24; 2026.8.31 runs on Node 22.
+Python side: `google-adk[mcp]` (MCP SDK 2.3.0).
+
+**Two boundaries around `workspace/<project>/`.** Each server process gets exactly one allowed
+directory, so the server itself refuses anything outside it, including through symlinks. Before
+any call, Python rejects absolute paths, drive letters, UNC paths, `..`, `~`, `:`, control
+characters, Windows device names, and anything that resolves outside the folder.
+
+**The model reads, a gated tool writes.** The model sees only `list_directory`,
+`directory_tree`, `read_text_file`, and `get_file_info`, through `McpToolset(tool_filter=...)`,
+wrapped in `ProjectWorkspaceToolset`, which scopes the server to the session's project folder.
+Writes happen only inside `implement_scaffold`, whose client can call only `create_directory`,
+`write_file`, and `read_text_file`. Giving the model `write_file` directly would let it skip the
+prerequisite and the log. No delete, move, edit, shell, or execution tool is reachable.
+
+**Implementation is gated, verified, and logged.** It needs a published architecture with no
+unpublished design edits and an unchanged PRD. Only scaffold paths are accepted, and one bad
+path rejects the whole batch before anything is written. Every file is read back and compared.
+The first failure stops the run, and the result lists written, failed, and not-attempted files.
+Every attempt, successful or failed, is added to the change log. An MCP startup failure is
+reported, never treated as success.
+
+**No execution in this phase.** No code runs, nothing installs, no tests execute. Running
+model-written code safely needs a proper sandbox, which fits better in a later Google Cloud phase.

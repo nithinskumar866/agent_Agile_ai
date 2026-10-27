@@ -10,13 +10,15 @@ from google.genai import types
 from .config import MODEL
 from .prompt import instruction
 from .tools import ALL_DEV_TOOLS
+from .workspace import ProjectWorkspaceToolset
 
 dev_agent = LlmAgent(
     name="dev_agent",
     description="Senior Software Architect and Lead Developer. Formulates technology stack recommendations, designs system architecture, and generates project structure scaffolds.",
     model=MODEL,
     instruction=instruction,
-    tools=ALL_DEV_TOOLS,
+    # Python tools plus read-only MCP file tools for the session's project sandbox.
+    tools=[*ALL_DEV_TOOLS, ProjectWorkspaceToolset()],
     generate_content_config=types.GenerateContentConfig(temperature=0.2),
 )
 

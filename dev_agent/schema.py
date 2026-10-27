@@ -1,7 +1,7 @@
 """Pydantic schemas for the technical architecture and project design."""
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -24,6 +24,26 @@ class ScaffoldEntry(BaseModel):
     description: str = Field(..., description="Purpose and role of this file/directory")
 
 
+class GeneratedFile(BaseModel):
+    """A source file the Dev agent wants written into the project sandbox."""
+    path: str = Field(..., description="Relative path from the architecture's scaffold, e.g. backend/app/main.py")
+    content: str = Field(..., description="Full text content of the file")
+
+
+class ImplementedFile(BaseModel):
+    path: str
+    bytes: int = 0
+    status: Literal["written", "failed", "not_attempted"] = "written"
+    error: str = ""
+
+
+class Implementation(BaseModel):
+    """What implement_scaffold has actually put on disk, across calls."""
+    project: str = Field(default="", description="Folder name under workspace/; fixed after the first write")
+    architecture_version: int = 0
+    files: List[ImplementedFile] = Field(default_factory=list)
+
+
 class TechDesign(BaseModel):
     title: str = Field(default="Technical Architecture & Project Scaffold")
     summary: str = Field(default="")
@@ -34,3 +54,5 @@ class TechDesign(BaseModel):
     components: List[ArchitectureComponent] = Field(default_factory=list)
     project_scaffold: List[ScaffoldEntry] = Field(default_factory=list)
     change_log: List[str] = Field(default_factory=list)
+    has_unpublished_changes: bool = Field(default=False, description="Design edited since the last publish")
+    implementation: Implementation = Field(default_factory=Implementation)

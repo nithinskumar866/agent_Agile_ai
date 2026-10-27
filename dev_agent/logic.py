@@ -44,7 +44,49 @@ def status_line(design: TechDesign, spec: Optional[RequirementsSpec] = None) -> 
     if is_stale(design, spec):
         line += (f" | STALE: architecture v{design.version} was built on PRD v{design.based_on_prd_version}"
                  " — review the changes and republish")
+    if design.has_unpublished_changes and design.version > 0:
+        line += " | Unpublished design changes"
+    impl = design.implementation
+    if impl.project:
+        written = sum(f.status == "written" for f in impl.files)
+        line += f" | Implemented: {written} files in workspace/{impl.project}/"
     return line
+
+
+def implementation_blocker(design: TechDesign, spec: Optional[RequirementsSpec]) -> Optional[str]:
+    """Why implementation may not start yet, or None. Code is only written from a
+    published architecture that matches both the current design and the current PRD."""
+    if design.version < 1:
+        return "No published architecture. Call publish_architecture first."
+    if design.has_unpublished_changes:
+        return (f"The design changed since architecture v{design.version} was published. "
+                "Publish it again before implementing.")
+    if is_stale(design, spec):
+        return (f"Architecture v{design.version} was built on PRD v{design.based_on_prd_version}, "
+                "but the PRD has changed. Re-check the spec and republish first.")
+    if not design.project_scaffold:
+        return "The published architecture has no project scaffold to implement."
+    return None
+
+
+def _plain(path: str) -> str:
+    p = path.strip().replace("\\", "/")
+    while p.startswith("./"):
+        p = p[2:]
+    return p
+
+
+def is_planned(design: TechDesign, path: str) -> bool:
+    """True if `path` is a file in the scaffold, or sits under a scaffold directory entry."""
+    target = _plain(path)
+    for entry in design.project_scaffold:
+        planned = _plain(entry.path)
+        if planned.endswith("/"):
+            if target.startswith(planned):
+                return True
+        elif target == planned:
+            return True
+    return False
 
 
 def requirement_ids(spec: Optional[RequirementsSpec]) -> set[str]:

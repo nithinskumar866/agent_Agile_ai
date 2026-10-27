@@ -30,10 +30,11 @@ dev_agent/              # Developer & Technical Architect agent
 ├── prompt.py           # Architect role & technical instruction
 ├── tools.py            # Tech stack, architecture component, and scaffold tools
 ├── logic.py            # Deterministic architecture rendering & state persistence
+├── workspace.py        # MCP filesystem sandbox: path checks, read-only toolset, write client
 ├── schema.py           # TechDesign schemas
 └── config.py           # Dev agent configuration
 
-tests/                  # 115 deterministic tests, no API key needed
+tests/                  # 189 tests (3 start the real MCP server; skip with AGENTCORP_SKIP_MCP_TESTS=1), no API key needed
 shared/models.py        # Model routing: Gemini, or NVIDIA via LiteLLM
 docs/decisions.md       # Architecture decision log
 ```
@@ -55,6 +56,18 @@ In the dev UI, watch:
 - **Artifacts** — `prd_v1.md`, `prd_v2.md`, … each time it publishes
 
 Sessions persist in `.adk/` across restarts (ADK's default local storage).
+
+## Dev agent file sandbox (MCP)
+
+The Dev agent can write real source files, but only into `workspace/<project>/`, through the
+official filesystem MCP server. Requirements: **Node.js 22+ with npx** on PATH, and
+`google-adk[mcp]` (already in requirements.txt). No manual server start is needed: ADK starts
+`npx -y @modelcontextprotocol/server-filesystem@2026.8.31 workspace/<project>` on demand. The
+first run downloads the package.
+
+Flow: publish the PRD, ask for the architecture (published as `architecture_vN.md`), then ask
+the Dev agent to **build/implement** it. It calls `implement_scaffold`, which writes only paths
+from the published scaffold and reads each file back. Nothing is run, installed, or tested.
 
 ## Test
 

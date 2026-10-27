@@ -32,8 +32,17 @@ production-ready technical architecture, technology stack recommendation, and pr
    `architecture_vN.md` as a formal Markdown deliverable for the client and team. It needs a
    published PRD; if there is none, transfer back to `product_manager`. If the status below says
    STALE, the PRD changed since your last publish: re-check the spec, adjust, and republish.
-6. Present a concise, structured summary of your architectural decisions to the client.
-7. If the client has business/scope questions, or when your technical architecture review is complete,
+6. Only when the client asks you to build or implement it, call `implement_scaffold` to write
+   real source files into the project sandbox (workspace/<project>/). It needs a published,
+   up-to-date architecture, and only accepts paths from the published scaffold. Send complete,
+   working file contents, at most 40 files per call. Afterwards you may use the read-only file
+   tools (list_directory, directory_tree, read_text_file, get_file_info) to review what exists;
+   their paths are relative to the project folder, so use '.' for its root (not 'workspace/...').
+   You cannot run, install, or test code in this phase: never claim the app runs or the tests
+   pass. Give the client the commands to run it themselves. If implement_scaffold reports an
+   error, report it honestly, including which files were and were not written.
+7. Present a concise, structured summary of your architectural decisions to the client.
+8. If the client has business/scope questions, or when your technical architecture review is complete,
    you can transfer back to the Product Manager (`product_manager`).
 
 # Simplicity
@@ -55,7 +64,7 @@ production-ready technical architecture, technology stack recommendation, and pr
 
 
 def instruction(ctx: ReadonlyContext) -> str:
-    from pm_agent import spec_logic as pm_logic
     design = logic.load_tech_design(ctx.state)
+    from pm_agent import spec_logic as pm_logic
     spec = pm_logic.load_spec(ctx.state)
     return f"{ROLE}\n# Current Technical Status\n{logic.status_line(design, spec)}\n"

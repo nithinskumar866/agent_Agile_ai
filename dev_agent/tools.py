@@ -10,10 +10,16 @@ from typing import List, Literal, Optional
 from google.adk.tools import ToolContext
 from google.genai import types
 
-from . import logic
-from .schema import ArchitectureComponent, ScaffoldEntry, TechStackItem
+from . import logic, workspace
+from .schema import ArchitectureComponent, GeneratedFile, ImplementedFile, ScaffoldEntry, TechStackItem
 
 DesignItemKind = Literal["tech_stack", "component", "scaffold"]
+
+
+def _changed(design, note: str) -> None:
+    """Record a design edit. The design then differs from the published architecture."""
+    design.change_log.append(note)
+    design.has_unpublished_changes = True
 
 
 def _load_spec_safely(state: dict):
@@ -77,13 +83,13 @@ def recommend_tech_stack(category: str, technology: str, rationale: str, tool_co
         if item.category.lower() == cat_lower:
             item.technology = technology.strip()
             item.rationale = rationale.strip()
-            design.change_log.append(f"Updated tech stack [{category}]: {technology}")
+            _changed(design, f"Updated tech stack [{category}]: {technology}")
             logic.save_tech_design(tool_context.state, design)
             return {"ok": True, "action": "updated", "category": category, "technology": technology}
 
     item = TechStackItem(category=category.strip(), technology=technology.strip(), rationale=rationale.strip())
     design.tech_stack.append(item)
-    design.change_log.append(f"Added tech stack [{category}]: {technology}")
+    _changed(design, f"Added tech stack [{category}]: {technology}")
     logic.save_tech_design(tool_context.state, design)
     return {"ok": True, "action": "added", "category": category, "technology": technology}
 
@@ -128,12 +134,12 @@ def add_architecture_component(
     for i, existing in enumerate(design.components):
         if existing.name.lower() == comp.name.lower():
             design.components[i] = comp
-            design.change_log.append(f"Updated architecture component: {comp.name}")
+            _changed(design, f"Updated architecture component: {comp.name}")
             logic.save_tech_design(tool_context.state, design)
             return {"ok": True, "action": "updated", "name": comp.name}
 
     design.components.append(comp)
-    design.change_log.append(f"Added architecture component: {comp.name}")
+    _changed(design, f"Added architecture component: {comp.name}")
     logic.save_tech_design(tool_context.state, design)
     return {"ok": True, "action": "added", "name": comp.name}
 
@@ -166,7 +172,7 @@ def add_project_scaffold(entries: List[ScaffoldEntry], tool_context: ToolContext
             design.project_scaffold.append(entry)
             added.append(entry.path)
 
-    design.change_log.append(f"Scaffold: {len(added)} added, {len(updated)} updated")
+    _changed(design, f"Scaffold: {len(added)} added, {len(updated)} updated")
     logic.save_tech_design(tool_context.state, design)
     return {"ok": True, "added": len(added), "updated": updated, "total_entries": len(design.project_scaffold)}
 
@@ -190,7 +196,7 @@ def remove_design_item(kind: DesignItemKind, key: str, reason: str, tool_context
     for i, item in enumerate(items):
         if getattr(item, key_field).lower() == key.strip().lower():
             items.pop(i)
-            design.change_log.append(f"Removed {kind} [{key}]: {reason}")
+            _changed(design, f"Removed {kind} [{key}]: {reason}")
             logic.save_tech_design(tool_context.state, design)
             return {"ok": True}
     return {"error": f"No {kind} entry {key!r}."}
@@ -229,6 +235,7 @@ async def publish_architecture(summary: str, tool_context: ToolContext) -> dict:
     design.version += 1
     design.summary = summary
     design.based_on_prd_version = spec.meta.version
+    design.has_unpublished_changes = False
     now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
     design.published_at = now_iso
     logic.save_tech_design(tool_context.state, design)
@@ -249,6 +256,125 @@ async def publish_architecture(summary: str, tool_context: ToolContext) -> dict:
     }
 
 
+# Indirection so tests can swap in a fake or point at a temporary workspace.
+open_filesystem = workspace.McpFilesystemClient
+
+
+async def implement_scaffold(files: List[GeneratedFile], tool_context: ToolContext, project: str = "") -> dict:
+    """Write real source files for the published architecture into the project sandbox
+    (workspace/<project>/), through the filesystem MCP server.
+
+    Only paths from the published scaffold are accepted (a file entry, or a file under a
+    directory entry). Nothing is written unless every path is valid. Each file is read
+    back to verify it. Code is never run, installed, or tested in this phase — tell the
+    client how to run it themselves.
+
+    Args:
+        files: The files to write, each with `path` (as in the scaffold, relative) and
+            `content` (the complete file text). At most 40 per call; call again for more.
+        project: Folder name for the sandbox, e.g. 'todo-app'. Required the first time;
+            after that it is fixed and may be omitted.
+    """
+    state = tool_context.state
+    design = logic.load_tech_design(state)
+    spec = _load_spec_safely(state)
+    if blocker := logic.implementation_blocker(design, spec):
+        return {"error": blocker}
+
+    impl = design.implementation
+    try:
+        slug = workspace.project_slug(project) if project.strip() else impl.project
+        if not slug:
+            return {"error": "Give a project folder name the first time, e.g. project='todo-app'."}
+        if impl.project and slug != impl.project:
+            return {"error": f"This design is implemented in workspace/{impl.project}/; it cannot move to {slug!r}."}
+        sandbox = workspace.project_dir(slug)
+    except workspace.SandboxViolation as exc:
+        return {"error": str(exc)}
+
+    # Validate everything before writing anything.
+    try:
+        parsed = [GeneratedFile.model_validate(f) for f in files]
+    except ValueError as exc:
+        return {"error": f"Each file needs a path and content: {exc}"}
+    if not parsed:
+        return {"error": "No files given."}
+    if len(parsed) > workspace.MAX_FILES_PER_CALL:
+        return {"error": f"At most {workspace.MAX_FILES_PER_CALL} files per call; split the rest into another call."}
+    problems, planned, seen = [], [], set()
+    for f in parsed:
+        try:
+            rel = workspace.safe_relative_path(f.path)
+            target = workspace.resolve_in_sandbox(sandbox, rel)
+        except workspace.SandboxViolation as exc:
+            problems.append(str(exc))
+            continue
+        size = len(f.content.encode("utf-8"))
+        if str(rel) in seen:
+            problems.append(f"{rel} is listed twice.")
+        elif not logic.is_planned(design, str(rel)):
+            problems.append(f"{rel} is not in the published scaffold. Add it, republish, then implement.")
+        elif size > workspace.MAX_FILE_BYTES:
+            problems.append(f"{rel} is {size} bytes; the limit is {workspace.MAX_FILE_BYTES}.")
+        else:
+            seen.add(str(rel))
+            planned.append((str(rel), target, f.content, size))
+    if problems:
+        return {"error": "Nothing was written. Fix these files first.", "problems": problems}
+
+    # Write, then read back. Stop at the first failure and report exactly what happened.
+    sandbox.mkdir(parents=True, exist_ok=True)
+    results: list[ImplementedFile] = []
+    failure = ""
+    try:
+        async with open_filesystem(sandbox) as fs:
+            for rel, target, content, size in planned:
+                try:
+                    await fs.call("create_directory", {"path": str(target.parent)})
+                    await fs.call("write_file", {"path": str(target), "content": content})
+                    if await fs.call("read_text_file", {"path": str(target)}) != content:
+                        raise workspace.McpToolFailed("read-back did not match what was written")
+                except Exception as exc:  # any error on this file: it may be partly written
+                    failure = f"{rel}: {exc}" if isinstance(exc, workspace.McpToolFailed) \
+                        else f"{rel}: {type(exc).__name__}: {exc}"
+                    results.append(ImplementedFile(path=rel, status="failed", error=str(exc)[:300]))
+                    break
+                results.append(ImplementedFile(path=rel, bytes=size, status="written"))
+    except workspace.McpUnavailable as exc:
+        failure = str(exc)
+    except Exception as exc:  # e.g. the server died while the session closed
+        failure = failure or f"MCP session error: {type(exc).__name__}: {exc}"
+    attempted = {r.path for r in results}
+    results += [ImplementedFile(path=rel, status="not_attempted") for rel, *_ in planned if rel not in attempted]
+
+    # Record every attempt in the change history, successful or not.
+    impl.project = slug
+    impl.architecture_version = design.version
+    by_path = {f.path: f for f in impl.files}
+    by_path.update({r.path: r for r in results})
+    impl.files = list(by_path.values())
+    written = [r.path for r in results if r.status == "written"]
+    if failure:
+        design.change_log.append(
+            f"Implementation FAILED (architecture v{design.version}): {len(written)} of {len(planned)} "
+            f"files written to workspace/{slug}/ — {failure[:200]}")
+    else:
+        shown = ", ".join(written[:8]) + (f" (+{len(written) - 8} more)" if len(written) > 8 else "")
+        design.change_log.append(
+            f"Implemented {len(written)} files in workspace/{slug}/ from architecture v{design.version}: {shown}")
+    logic.save_tech_design(state, design)
+
+    if failure:
+        return {
+            "error": f"Implementation did not complete: {failure}",
+            "written": written,
+            "failed": [r.path for r in results if r.status == "failed"],
+            "not_attempted": [r.path for r in results if r.status == "not_attempted"],
+        }
+    return {"ok": True, "workspace": f"workspace/{slug}/", "written": written,
+            "note": "Files written and verified. Nothing was run, installed, or tested."}
+
+
 ALL_DEV_TOOLS = [
     inspect_spec,
     recommend_tech_stack,
@@ -257,4 +383,5 @@ ALL_DEV_TOOLS = [
     remove_design_item,
     get_tech_design,
     publish_architecture,
+    implement_scaffold,
 ]
