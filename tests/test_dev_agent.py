@@ -142,11 +142,9 @@ def test_publish_architecture_creates_artifact(ctx):
 
 
 def test_multi_agent_wiring_sub_agents():
-    # Verify PM root agent has dev_agent registered as a sub_agent
-    assert len(root_agent.sub_agents) == 1
-    sub = root_agent.sub_agents[0]
-    assert sub.name == "dev_agent"
-    assert sub.parent_agent.name == "product_manager"
+    # The PM is the root; dev_agent and qa_agent are its sub-agents (and each other's peers).
+    assert [s.name for s in root_agent.sub_agents] == ["dev_agent", "qa_agent"]
+    assert all(s.parent_agent.name == "product_manager" for s in root_agent.sub_agents)
 
 
 def test_standalone_app_is_a_parentless_copy():

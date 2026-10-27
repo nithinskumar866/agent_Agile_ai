@@ -107,7 +107,7 @@ Every attempt, successful or failed, is added to the change log. An MCP startup 
 reported, never treated as success.
 
 **No execution in this phase.** No code runs, nothing installs, no tests execute. Running
-model-written code safely needs a proper sandbox, which fits better in a later Google Cloud phase.
+model-written code safely needs a proper sandbox (added later by the QA agent; see 2026-10-27).
 
 ## 2026-10-26 — Phase 3A: `adk eval` suite; the spec contract moves to `shared/`
 
@@ -134,3 +134,37 @@ metrics, and it would have broken the Dev agent's spec reads mid-eval. The hando
 
 **Vertex AI is a config switch.** `scripts/vertex_preflight.py` checks env, application-default
 credentials, project, and one real Gemini call on Vertex AI, and names the step to fix.
+
+## 2026-10-27 — QA agent: locked acceptance tests, run in Docker
+
+**Tests come from the client, through the PRD.** The QA agent tests only the acceptance
+criteria of 'must' items, each with an ID (`FR-1.AC2`). The suite can be locked only when the
+PRD is *approved* and every criterion has a test or a recorded manual check. A 'must' item
+without criteria blocks the lock and goes back to the PM: QA does not invent conditions.
+
+**Tests before code, and the coder cannot touch them.** `implement_scaffold` refuses until a
+suite is locked for the current PRD version, and refuses `qa_tests/` and any `conftest.py`.
+A locked suite changes only when the PRD version changes. So "the test is wrong" becomes a
+requirement change the client approves, never an edit by whoever is failing it. This blocks
+the reward-hacking shortcut of weakening a test to make it pass.
+
+**Results are recorded by code, not reported by the model.** `run_tests` is one fixed tool
+(given to QA and Dev). It grades every locked case from pytest's JUnit XML: a test that was
+skipped or never collected does not pass. Every run is stored in `state["test_suite"]`.
+At most 5 runs per suite version, then the verdict is `escalated` and a person decides.
+
+**The runner trusts nothing on disk.** Tests run from the locked copies in state, written over
+a throwaway copy of the project; pytest gets its own `-c` config, `--confcutdir`, plugin
+autoload off, and `python -P`. Real-Docker tests prove a weakened test file, a skip-all
+`conftest.py`, and a deselect-all `pytest.ini` all fail to turn broken code green. Limits:
+the container has no network, 1 CPU, 1 GB, 256 processes, no capabilities, read-only root.
+Dependencies install in a separate container, wheels only, so no package build script runs.
+Not defended: deliberately hostile code in the same process as pytest could fake a result.
+
+**Two small agents, not a pipeline.** QA is a peer sub-agent of the PM next to Dev. A
+LoopAgent would hard-wire coder -> runner -> tester; here the order is enforced by the
+gates instead, and the client decides when to build. On Google Cloud the same runner
+contract maps onto the Agent Engine code-execution sandbox.
+
+**Model quirk.** Nemotron sometimes sends a list argument as a JSON string; list-taking
+tools now decode it (`shared/args.py`) instead of refusing the batch.

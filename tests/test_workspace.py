@@ -19,6 +19,8 @@ from dev_agent import workspace
 from dev_agent.agent import dev_agent
 from dev_agent.prompt import instruction as dev_instruction
 from pm_agent import tools as pm_tools
+from shared.spec import load_spec
+from shared.testsuite import TestSuite, save_suite
 
 needs_npx = pytest.mark.skipif(
     shutil.which("npx") is None or bool(os.getenv("AGENTCORP_SKIP_MCP_TESTS")),
@@ -97,8 +99,13 @@ def say(ctx, text):
     ctx.user_content = types.Content(role="user", parts=[types.Part(text=text)])
 
 
-def published_architecture(ctx, scaffold=None):
-    """A published PRD and a published architecture with a small scaffold."""
+def lock_tests(ctx):
+    """Stand-in for qa_agent: a locked suite for the current PRD (tests come before code)."""
+    save_suite(ctx.state, TestSuite(version=1, locked=True, based_on_prd_version=load_spec(ctx.state).meta.version))
+
+
+def published_architecture(ctx, scaffold=None, with_tests=True):
+    """A published PRD, a published architecture with a small scaffold, and locked tests."""
     pm_tools.set_engagement("new_build", "productivity", "Todo app", "", tool_context=ctx)
     pm_tools.add_text_items("goals", ["Track tasks"], "client", tool_context=ctx)
     pm_tools.add_text_items("success_metrics", ["Daily use"], "client", tool_context=ctx)
@@ -114,6 +121,8 @@ def published_architecture(ctx, scaffold=None):
         {"path": "README.md", "description": "How to run"},
     ], tool_context=ctx)
     assert asyncio.run(dev_tools.publish_architecture("v1", tool_context=ctx))["ok"]
+    if with_tests:
+        lock_tests(ctx)
 
 
 def implement(ctx, files, project="todo-app"):
@@ -242,6 +251,38 @@ def test_implement_refused_when_prd_changed_since_architecture(ws, ctx, monkeypa
     assert "error" in res and "PRD has changed" in res["error"]
 
 
+def test_implement_refused_before_tests_are_locked(ws, ctx, monkeypatch):
+    use_fake(monkeypatch)
+    published_architecture(ctx, with_tests=False)
+    res = implement(ctx, [{"path": "README.md", "content": "x"}])
+    assert "error" in res and "qa_agent" in res["error"] and "before code" in res["error"]
+    assert not any(ws.iterdir()) and FakeFilesystem.calls == []
+
+
+def test_implement_refused_when_tests_are_for_an_older_prd(ws, ctx, monkeypatch):
+    use_fake(monkeypatch)
+    published_architecture(ctx)
+    pm_tools.add_text_items("constraints", ["Must work offline"], "client", tool_context=ctx)
+    say(ctx, "Please publish the PRD.")
+    asyncio.run(pm_tools.publish_prd("v2", False, tool_context=ctx))
+    asyncio.run(dev_tools.publish_architecture("v2", tool_context=ctx))
+    res = implement(ctx, [{"path": "README.md", "content": "x"}])
+    assert "error" in res and "re-lock" in res["error"]
+
+
+@pytest.mark.parametrize("path", ["qa_tests/test_tasks.py", "QA_TESTS/x.py", "backend/conftest.py", "conftest.py"])
+def test_dev_can_never_write_test_files(ws, ctx, monkeypatch, path):
+    """Even when the scaffold lists them: tests belong to qa_agent."""
+    use_fake(monkeypatch)
+    published_architecture(ctx, scaffold=[{"path": "qa_tests/", "description": "tests"},
+                                          {"path": "QA_TESTS/", "description": "tests"},
+                                          {"path": "backend/", "description": "app"},
+                                          {"path": "conftest.py", "description": "x"}])
+    res = implement(ctx, [{"path": path, "content": "def test_x(): pass"}])
+    assert "error" in res and "test file" in res["problems"][0]
+    assert FakeFilesystem.calls == []
+
+
 def test_republishing_clears_the_unpublished_flag(ws, ctx, monkeypatch):
     use_fake(monkeypatch)
     published_architecture(ctx)
@@ -351,9 +392,10 @@ def test_real_client_reports_unstartable_server(ws, ctx, monkeypatch):
     assert not (ws / "todo-app/README.md").exists()
 
 
-def test_prompt_forbids_claiming_code_runs(ctx):
+def test_prompt_ties_claims_to_run_tests(ctx):
     text = dev_instruction(ctx)
-    assert "implement_scaffold" in text and "cannot run, install, or test" in text
+    assert "implement_scaffold" in text and "never claim tests pass unless" in text
+    assert "never edit the tests" in text
 
 
 # ── the real filesystem MCP server ───────────────────────────────────────────

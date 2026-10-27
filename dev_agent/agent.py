@@ -12,13 +12,16 @@ from .prompt import instruction
 from .tools import ALL_DEV_TOOLS
 from .workspace import ProjectWorkspaceToolset
 
+# Imported after .tools: qa_agent's tools import dev_agent.logic and .workspace.
+from qa_agent.tools import run_tests  # noqa: E402
+
 dev_agent = LlmAgent(
     name="dev_agent",
-    description="Senior Software Architect and Lead Developer. Formulates technology stack recommendations, designs system architecture, and generates project structure scaffolds.",
+    description="Senior Software Architect and Lead Developer. Formulates technology stack recommendations, designs system architecture, generates project structure scaffolds, and implements code that passes the locked acceptance tests.",
     model=MODEL,
     instruction=instruction,
-    # Python tools plus read-only MCP file tools for the session's project sandbox.
-    tools=[*ALL_DEV_TOOLS, ProjectWorkspaceToolset()],
+    # Python tools, the shared test runner, and read-only MCP file tools for the project sandbox.
+    tools=[*ALL_DEV_TOOLS, run_tests, ProjectWorkspaceToolset()],
     generate_content_config=types.GenerateContentConfig(temperature=0.2),
 )
 

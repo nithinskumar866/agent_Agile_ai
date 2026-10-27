@@ -1,7 +1,7 @@
 # AgentCorp — a technology services company run by Google ADK agents
 
 Learning project for Google's Agent Development Kit. Each department of a services company
-becomes an agent. **Current stage: Product Manager & Developer multi-agent collaboration.**
+becomes an agent. **Current stage: PM, Developer, and QA agents, with tests written before code.**
 
 ## Agents
 
@@ -13,11 +13,17 @@ requirements spec, published as a Markdown PRD (`prd_v1.md`).
 ### 2. The Dev Agent (`dev_agent`)
 Collaborates as an engineering sub-agent. Inspects the shared session state `state["spec"]`
 to formulate technology stack recommendations, design modular system architecture, and plan
-the project file structure scaffold, publishing `architecture_v1.md`.
+the project file structure scaffold, publishing `architecture_v1.md`. Implements the code
+once the QA agent has locked the acceptance tests, and repairs it until they pass.
+
+### 3. The QA Agent (`qa_agent`)
+Writes pytest acceptance tests from the client-approved 'must' acceptance criteria, **before**
+any code exists, and locks them. Runs them in an isolated Docker container and publishes
+`qa_report_vN.md` with a result for every criterion.
 
 ```
 pm_agent/               # Product Manager agent
-├── agent.py            # LlmAgent with sub_agents=[dev_agent] + App
+├── agent.py            # LlmAgent with sub_agents=[dev_agent, qa_agent] + App
 ├── prompt.py           # PM role & dev delegation guidelines
 ├── tools.py            # 14 tools writing to state["spec"]
 ├── spec_logic.py       # Deterministic core: IDs, review checks, PRD rendering
@@ -34,11 +40,20 @@ dev_agent/              # Developer & Technical Architect agent
 ├── schema.py           # TechDesign schemas
 └── config.py           # Dev agent configuration
 
-tests/                  # 210 tests, no model calls or API key (3 start the real MCP server;
-                        #   skip those with AGENTCORP_SKIP_MCP_TESTS=1)
+qa_agent/               # QA agent
+├── agent.py            # LlmAgent & standalone App
+├── prompt.py           # QA role: tests from criteria only, never weaken a test
+├── tools.py            # inspect, write/lock the suite, run_tests, report
+├── logic.py            # Criteria IDs, coverage, grading, report rendering
+└── runner.py           # The Docker test runner (the only code that executes generated code)
+
+tests/                  # 250 tests, no model calls or API key. 3 start the real MCP server
+                        #   (skip: AGENTCORP_SKIP_MCP_TESTS=1), 2 run real Docker containers
+                        #   (skip: AGENTCORP_SKIP_DOCKER_TESTS=1)
 shared/models.py        # Model routing: Gemini, or NVIDIA via LiteLLM
 shared/spec.py          # RequirementsSpec: the handoff contract every agent reads
 shared/policy.py        # What wording counts as "publish" / "approve"
+shared/testsuite.py     # TestSuite: the locked tests, and the rules the Dev agent obeys
 evals/                  # adk eval suite: cases, config, custom metrics, runner
 scripts/vertex_preflight.py  # Checks the Vertex AI setup step by step
 docs/decisions.md       # Architecture decision log
@@ -72,7 +87,27 @@ first run downloads the package.
 
 Flow: publish the PRD, ask for the architecture (published as `architecture_vN.md`), then ask
 the Dev agent to **build/implement** it. It calls `implement_scaffold`, which writes only paths
-from the published scaffold and reads each file back. Nothing is run, installed, or tested.
+from the published scaffold and reads each file back. It refuses to start until the QA agent
+has locked the acceptance tests, and never writes `qa_tests/` or any `conftest.py`.
+
+## Acceptance tests (QA agent + Docker)
+
+Needs **Docker Desktop running**. Flow, each step enforced in code:
+
+1. The PRD is **approved** by the client, and the architecture is published.
+2. `qa_agent` writes pytest tests into `workspace/<project>/qa_tests/`, each mapped to a
+   criterion ID like `FR-1.AC2`; untestable criteria are recorded as manual checks.
+3. `lock_test_suite` refuses unless every 'must' criterion is covered. Locked tests change
+   only when the PRD changes (a new version goes back through the client).
+4. `dev_agent` implements, then calls `run_tests`. On failures it fixes the code, never the
+   tests. At most 5 runs per suite version, then a person decides.
+5. `qa_agent` publishes `qa_report_vN.md`.
+
+`run_tests` installs `requirements.txt` (wheels only) into a cache, then runs pytest on a
+throwaway copy of the project with **no network**, 1 CPU, 1 GB memory, no Linux capabilities,
+and a read-only root filesystem. The test files come from the locked copy in session state,
+and pytest gets its own config, so editing tests, adding a `conftest.py`, or a `pytest.ini` on
+disk changes nothing. Only the Python app folder is tested; frontend code is not executed.
 
 ## Evaluate the agents (`adk eval`)
 
@@ -119,6 +154,9 @@ In `pm_agent/.env`: set `GOOGLE_GENAI_USE_VERTEXAI=TRUE`, `GOOGLE_CLOUD_PROJECT`
 - Ask for a tech stack or architecture — it should hand over to `dev_agent`, which needs a
   published PRD before it publishes `architecture_v1.md`.
 - Change the PRD after the architecture is published and see the Dev agent flag it as STALE.
+- After approving the PRD and publishing the architecture: *"Get the acceptance tests
+  written and locked"*, then *"Build it"*. Then ask the developer to change a test so it
+  passes; QA must refuse and route it to the PM as a requirement change.
 - Say "looks good" — it must not publish or approve until you say "publish the PRD" /
   "I approve the PRD".
 - After it publishes, change your mind ("drop the mobile app") and see v2 + change log.

@@ -10,7 +10,9 @@ from typing import List, Literal, Optional
 from google.adk.tools import ToolContext
 from google.genai import types
 
+from shared.args import as_list
 from shared.spec import load_spec
+from shared.testsuite import TEST_DIR, implementation_gate, is_protected_path, load_suite
 
 from . import logic, workspace
 from .schema import ArchitectureComponent, GeneratedFile, ImplementedFile, ScaffoldEntry, TechStackItem
@@ -156,7 +158,7 @@ def add_project_scaffold(entries: List[ScaffoldEntry], tool_context: ToolContext
             'frontend/src/pages/') and `description` (purpose of that file or directory).
     """
     try:
-        parsed = [ScaffoldEntry.model_validate(e) for e in entries]
+        parsed = [ScaffoldEntry.model_validate(e) for e in as_list(entries)]
     except ValueError as exc:
         return {"error": f"Each entry needs a path and a description: {exc}"}
     parsed = [ScaffoldEntry(path=e.path.strip(), description=e.description.strip()) for e in parsed]
@@ -269,8 +271,9 @@ async def implement_scaffold(files: List[GeneratedFile], tool_context: ToolConte
 
     Only paths from the published scaffold are accepted (a file entry, or a file under a
     directory entry). Nothing is written unless every path is valid. Each file is read
-    back to verify it. Code is never run, installed, or tested in this phase — tell the
-    client how to run it themselves.
+    back to verify it. Needs the locked acceptance tests from qa_agent first; test files
+    (qa_tests/, any conftest.py) are never yours to write. Call it again with fixed files
+    to repair code after failing tests.
 
     Args:
         files: The files to write, each with `path` (as in the scaffold, relative) and
@@ -282,6 +285,8 @@ async def implement_scaffold(files: List[GeneratedFile], tool_context: ToolConte
     design = logic.load_tech_design(state)
     spec = _load_spec_safely(state)
     if blocker := logic.implementation_blocker(design, spec):
+        return {"error": blocker}
+    if blocker := implementation_gate(load_suite(state), spec.meta.version):
         return {"error": blocker}
 
     impl = design.implementation
@@ -297,7 +302,7 @@ async def implement_scaffold(files: List[GeneratedFile], tool_context: ToolConte
 
     # Validate everything before writing anything.
     try:
-        parsed = [GeneratedFile.model_validate(f) for f in files]
+        parsed = [GeneratedFile.model_validate(f) for f in as_list(files)]
     except ValueError as exc:
         return {"error": f"Each file needs a path and content: {exc}"}
     if not parsed:
@@ -313,7 +318,9 @@ async def implement_scaffold(files: List[GeneratedFile], tool_context: ToolConte
             problems.append(str(exc))
             continue
         size = len(f.content.encode("utf-8"))
-        if str(rel) in seen:
+        if is_protected_path(str(rel)):
+            problems.append(f"{rel} is a test file. Tests belong to qa_agent and are locked; fix the code instead.")
+        elif str(rel) in seen:
             problems.append(f"{rel} is listed twice.")
         elif not logic.is_planned(design, str(rel)):
             problems.append(f"{rel} is not in the published scaffold. Add it, republish, then implement.")
@@ -375,7 +382,8 @@ async def implement_scaffold(files: List[GeneratedFile], tool_context: ToolConte
             "not_attempted": [r.path for r in results if r.status == "not_attempted"],
         }
     return {"ok": True, "workspace": f"workspace/{slug}/", "written": written,
-            "note": "Files written and verified. Nothing was run, installed, or tested."}
+            "note": f"Files written and verified, not yet tested. Call run_tests to check them "
+                    f"against the locked acceptance tests in {TEST_DIR}/."}
 
 
 ALL_DEV_TOOLS = [
