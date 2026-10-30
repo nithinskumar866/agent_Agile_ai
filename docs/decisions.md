@@ -168,3 +168,27 @@ contract maps onto the Agent Engine code-execution sandbox.
 
 **Model quirk.** Nemotron sometimes sends a list argument as a JSON string; list-taking
 tools now decode it (`shared/args.py`) instead of refusing the batch.
+
+## 2026-10-30 — Company memory through MCP Toolbox for Databases
+
+**The agent gets named lookups, not SQL.** Toolbox v1.15.0 runs as its own server over
+`data/company.db`. `toolbox/tools.yaml` defines three `sqlite-sql` tools with fixed, parameterized
+SELECTs, grouped as the `company_memory` toolset. There is no `sqlite-execute-sql` and no template
+parameter, so the model cannot write its own query. Tests assert both rules.
+
+**Read-only is enforced by the database, not by trust.** The source opens
+`file:data/company.db?mode=ro`. A test sends an INSERT through a real Toolbox and checks that it
+fails with "readonly database" and leaves no row. Only `scripts/seed_company_db.py` writes.
+
+**Memory is a convenience, never a dependency.** `OptionalToolset` turns any load failure
+(server down, wrong URL) into "no tools this turn" with one warning. The PM prompt says past
+projects are never the client's requirements: a detail enters the spec only after the client
+confirms it, with source 'client'.
+
+**Seeded from a real run.** The one `delivered` project and its four lessons come from the email
+sign-up build, including the three defects that passed all 17 tests (static files not served,
+a JavaScript syntax error, the table never created). `sample` rows are labelled as invented.
+
+**Windows detail.** `with sqlite3.connect()` commits but does not close, which locked the file
+for the next unlink; the seed script and tests close explicitly.
+

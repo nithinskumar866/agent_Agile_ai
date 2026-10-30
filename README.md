@@ -47,7 +47,9 @@ qa_agent/               # QA agent
 ├── logic.py            # Criteria IDs, coverage, grading, report rendering
 └── runner.py           # The Docker test runner (the only code that executes generated code)
 
-tests/                  # 250 tests, no model calls or API key. 3 start the real MCP server
+toolbox/tools.yaml     # MCP Toolbox config: three read-only lookups over data/company.db
+
+tests/                  # 274 tests, no model calls or API key. 3 start the real MCP server, 2 the real Toolbox
                         #   (skip: AGENTCORP_SKIP_MCP_TESTS=1), 2 run real Docker containers
                         #   (skip: AGENTCORP_SKIP_DOCKER_TESTS=1)
 shared/models.py        # Model routing: Gemini, or NVIDIA via LiteLLM
@@ -108,6 +110,23 @@ throwaway copy of the project with **no network**, 1 CPU, 1 GB memory, no Linux 
 and a read-only root filesystem. The test files come from the locked copy in session state,
 and pytest gets its own config, so editing tests, adding a `conftest.py`, or a `pytest.ini` on
 disk changes nothing. Only the Python app folder is tested; frontend code is not executed.
+
+## Company memory (MCP Toolbox for Databases)
+
+The PM can look up AgentCorp's earlier projects and lessons learned. The SQL lives in a separate
+**Toolbox** server (`toolbox/tools.yaml`), not in the agent: the model sees three named lookups
+(`find_past_projects`, `get_past_project`, `find_lessons`) and nothing else, and the database is
+opened read-only (a write attempt fails with "readonly database").
+
+```
+python scripts/get_toolbox.py                 # once: downloads the pinned binary into .tools/
+python scripts/seed_company_db.py             # once: creates data/company.db
+.tools/toolbox.exe --config toolbox/tools.yaml --port 5000   # leave running, then start adk web
+```
+
+If the server is not running the PM works as before, with no memory tools. `TOOLBOX_URL=""`
+switches the memory off; set it to point at another host. `sample` rows are invented; the
+`delivered` row is the real email sign-up run.
 
 ## Evaluate the agents (`adk eval`)
 

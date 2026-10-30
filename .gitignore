@@ -8,3 +8,5 @@ __pycache__/
 .adk/
 .vscode/
 workspace/
+.tools/
+data/

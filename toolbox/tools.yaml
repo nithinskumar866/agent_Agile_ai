@@ -1,0 +1,67 @@
+# MCP Toolbox for Databases: AgentCorp "company memory".
+# The agents never see SQL. They see three named, read-only lookups; Toolbox runs the
+# fixed statements below against a database opened read-only.
+# Run from the repo root:  .tools/toolbox.exe --config toolbox/tools.yaml
+kind: source
+name: company-db
+type: sqlite
+database: "file:data/company.db?mode=ro"
+---
+kind: tool
+name: find_past_projects
+type: sqlite-sql
+source: company-db
+description: |
+  Search AgentCorp's delivered and sample projects by ONE keyword; it must appear as exact
+  text in the title, summary, engagement type or stack, so a phrase like "email capture
+  landing page" finds nothing. Use it at the start of discovery to see whether similar work
+  was done. Returns at most 5 projects, or null. On null, try one different single word.
+parameters:
+  - name: keyword
+    type: string
+    description: A single word, e.g. "sign-up", "booking", "todo", "email".
+statement: |
+  SELECT id, title, engagement_type, stack, outcome, tests_passed, tests_total, data_origin
+  FROM projects
+  WHERE title LIKE '%' || ?1 || '%' OR summary LIKE '%' || ?1 || '%'
+     OR engagement_type LIKE '%' || ?1 || '%' OR stack LIKE '%' || ?1 || '%'
+  ORDER BY id DESC LIMIT 5
+---
+kind: tool
+name: get_past_project
+type: sqlite-sql
+source: company-db
+description: Full details of one past project, by the id that find_past_projects returned.
+parameters:
+  - name: project_id
+    type: integer
+    description: The project id.
+statement: |
+  SELECT id, title, summary, engagement_type, stack, outcome, tests_passed, tests_total,
+         delivered_on, data_origin
+  FROM projects WHERE id = ?
+---
+kind: tool
+name: find_lessons
+type: sqlite-sql
+source: company-db
+description: |
+  Lessons learned on past projects (what went wrong and what to do about it). Search by ONE
+  word that appears in the lesson text, e.g. "database", "tests", "static". Returns at most
+  5 lessons, or null.
+parameters:
+  - name: topic
+    type: string
+    description: A single word.
+statement: |
+  SELECT l.topic, l.lesson, p.title AS project
+  FROM lessons l JOIN projects p ON p.id = l.project_id
+  WHERE l.topic LIKE '%' || ?1 || '%' OR l.lesson LIKE '%' || ?1 || '%'
+  ORDER BY l.id DESC LIMIT 5
+---
+kind: toolset
+name: company_memory
+tools:
+  - find_past_projects
+  - get_past_project
+  - find_lessons

@@ -10,16 +10,19 @@ from google.genai import types
 
 from dev_agent.agent import dev_agent
 from qa_agent.agent import qa_agent
+from .company_memory import company_memory_toolset
 from .config import COMPACTION_KEEP_EVENTS, COMPACTION_TOKEN_THRESHOLD, MODEL
 from .prompt import instruction
 from .tools import ALL_TOOLS
+
+memory = company_memory_toolset()
 
 root_agent = LlmAgent(
     name="product_manager",
     description="Turns any client request into a structured, versioned requirements specification. Collaborates with dev_agent (architecture, code) and qa_agent (acceptance tests).",
     model=MODEL,
     instruction=instruction,
-    tools=ALL_TOOLS,
+    tools=[*ALL_TOOLS, *([memory] if memory else [])],
     sub_agents=[dev_agent, qa_agent],
     generate_content_config=types.GenerateContentConfig(temperature=0.3),
 )
