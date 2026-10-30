@@ -380,3 +380,47 @@ def test_list_arguments_sent_as_json_strings_are_accepted(ws, ctx, monkeypatch):
 
 def test_qa_hands_over_to_dev_only_when_the_client_asks(ctx):
     assert "only when the client asks for the build" in qa_instruction(ctx)
+
+
+def test_nvidia_output_limit_leaves_room_for_reasoning(monkeypatch):
+    """Seen live: at 16384 QA used the whole limit thinking and never wrote its tool call."""
+    from shared.models import DEFAULT_MAX_TOKENS, build_model
+    monkeypatch.delenv("NVIDIA_MAX_TOKENS", raising=False)
+    assert DEFAULT_MAX_TOKENS > 16384
+    assert build_model("nvidia/nemotron-3.5-super-vl-120b-a12b")._additional_args["max_tokens"] == DEFAULT_MAX_TOKENS
+    monkeypatch.setenv("NVIDIA_MAX_TOKENS", "20000")
+    assert build_model("nvidia/nemotron-3.5-super-vl-120b-a12b")._additional_args["max_tokens"] == 20000
+
+
+# ── regression: a malformed list argument flooded the context (1.2M tokens) ──
+
+def test_list_text_with_a_trailing_comma_is_read():
+    """Seen live: Nemotron sent `[{...}],` — strict json.loads fails on the comma."""
+    from shared.args import as_list
+    assert as_list('[{"a": 1}],') == [{"a": 1}]
+    assert as_list('[{"a": "line1\nline2"}]') == [{"a": "line1\nline2"}]  # raw newline inside a string
+    assert as_list(None) == [] and as_list(("x",)) == ["x"]
+
+
+@pytest.mark.parametrize("bad", ['[{"a": \\"x\\"}],', "not json", '{"a": 1}', '[1], [2]', 5])
+def test_unreadable_list_text_is_one_short_error(bad):
+    from shared.args import ArgumentFormatError, as_list
+    with pytest.raises(ArgumentFormatError) as err:
+        as_list(bad, "files")
+    assert len(str(err.value)) < 250 and "files" in str(err.value)
+
+
+def test_a_bad_test_suite_call_returns_a_small_error_not_one_per_character(ws, ctx, monkeypatch):
+    use_fakes(monkeypatch)
+    approved_project(ctx)
+    huge = '[{"path": "qa_tests/test_x.py", "content": "' + "x" * 200_000 + '"}]'
+    for kw in ({"files": huge + ","}, {"manual_checks": '[{"criterion_id": \\"FR-1.AC1\\"}],'}):
+        files = kw.pop("files", [{"path": "qa_tests/test_calc.py", "content": TEST_FILE}])
+        res = write(ctx, files=files, **kw)
+        assert "error" in res and len(str(res)) < 3000, len(str(res))
+
+
+def test_problem_lists_are_capped():
+    from shared.args import brief
+    shown = brief([f"problem {i} " + "y" * 1000 for i in range(50)])
+    assert len(shown) == 11 and all(len(p) <= 301 for p in shown[:10]) and "40 more" in shown[-1]

@@ -18,7 +18,7 @@ from google.genai import types
 
 from dev_agent import logic as dev_logic
 from dev_agent import workspace
-from shared.args import as_list
+from shared.args import ArgumentFormatError, as_list, brief
 from shared.spec import load_spec
 from shared.testsuite import (MAX_TEST_RUNS, TEST_DIR, LockedFile, ManualCheck, TestCase, TestFile, TestRun,
                               is_stale, load_suite, save_suite)
@@ -149,11 +149,17 @@ async def write_test_suite(
         return {"error": "No published architecture yet; the tests need its interfaces. Transfer to dev_agent."}
 
     valid_ids = logic.criteria(spec)
-    parsed_files, problems = _validate_files(as_list(files))
-    parsed_cases, case_problems = _validate_cases(as_list(cases), parsed_files, valid_ids)
+    try:
+        files, cases = as_list(files, "files"), as_list(cases, "cases")
+        manual_checks = as_list(manual_checks, "manual_checks")
+        test_dependencies = as_list(test_dependencies, "test_dependencies")
+    except ArgumentFormatError as exc:
+        return {"error": f"Nothing was written. {exc}"}
+    parsed_files, problems = _validate_files(files)
+    parsed_cases, case_problems = _validate_cases(cases, parsed_files, valid_ids)
     problems += case_problems
     checks = []
-    for m in as_list(manual_checks) or []:
+    for m in manual_checks:
         try:
             m = ManualCheck.model_validate(m)
         except ValueError as exc:
@@ -165,7 +171,7 @@ async def write_test_suite(
             problems.append(f"Manual check {m.criterion_id} needs a reason.")
         else:
             checks.append(ManualCheck(criterion_id=m.criterion_id, reason=m.reason.strip()))
-    deps = [str(d).strip() for d in as_list(test_dependencies) or []]
+    deps = [str(d).strip() for d in test_dependencies]
     problems += [f"Test dependency {d!r} must be pinned like 'httpx==0.27.2'." for d in deps if not _PINNED.match(d)]
     if not parsed_files and not problems:
         problems.append("No test files given.")
@@ -189,7 +195,7 @@ async def write_test_suite(
     except workspace.SandboxViolation as exc:
         problems.append(str(exc))
     if problems:
-        return {"error": "Nothing was written. Fix these first.", "problems": problems}
+        return {"error": "Nothing was written. Fix these first.", "problems": brief(problems)}
 
     sandbox.mkdir(parents=True, exist_ok=True)
     try:

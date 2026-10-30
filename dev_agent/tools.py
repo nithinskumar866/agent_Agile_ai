@@ -10,7 +10,7 @@ from typing import List, Literal, Optional
 from google.adk.tools import ToolContext
 from google.genai import types
 
-from shared.args import as_list
+from shared.args import as_list, brief
 from shared.spec import load_spec
 from shared.testsuite import TEST_DIR, implementation_gate, is_protected_path, load_suite
 
@@ -158,9 +158,9 @@ def add_project_scaffold(entries: List[ScaffoldEntry], tool_context: ToolContext
             'frontend/src/pages/') and `description` (purpose of that file or directory).
     """
     try:
-        parsed = [ScaffoldEntry.model_validate(e) for e in as_list(entries)]
-    except ValueError as exc:
-        return {"error": f"Each entry needs a path and a description: {exc}"}
+        parsed = [ScaffoldEntry.model_validate(e) for e in as_list(entries, 'entries')]
+    except ValueError as exc:  # includes ArgumentFormatError
+        return {"error": f"Each entry needs a path and a description: {str(exc)[:400]}"}
     parsed = [ScaffoldEntry(path=e.path.strip(), description=e.description.strip()) for e in parsed]
     if not parsed or any(not e.path or not e.description for e in parsed):
         return {"error": "Provide at least one entry; path and description cannot be empty."}
@@ -302,9 +302,9 @@ async def implement_scaffold(files: List[GeneratedFile], tool_context: ToolConte
 
     # Validate everything before writing anything.
     try:
-        parsed = [GeneratedFile.model_validate(f) for f in as_list(files)]
-    except ValueError as exc:
-        return {"error": f"Each file needs a path and content: {exc}"}
+        parsed = [GeneratedFile.model_validate(f) for f in as_list(files, 'files')]
+    except ValueError as exc:  # includes ArgumentFormatError
+        return {"error": f"Each file needs a path and content: {str(exc)[:400]}"}
     if not parsed:
         return {"error": "No files given."}
     if len(parsed) > workspace.MAX_FILES_PER_CALL:
@@ -330,7 +330,7 @@ async def implement_scaffold(files: List[GeneratedFile], tool_context: ToolConte
             seen.add(str(rel))
             planned.append((str(rel), target, f.content, size))
     if problems:
-        return {"error": "Nothing was written. Fix these files first.", "problems": problems}
+        return {"error": "Nothing was written. Fix these files first.", "problems": brief(problems)}
 
     # Write, then read back. Stop at the first failure and report exactly what happened.
     sandbox.mkdir(parents=True, exist_ok=True)

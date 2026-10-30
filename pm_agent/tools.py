@@ -14,6 +14,8 @@ from typing import Literal, Optional, get_args
 from google.adk.tools import ToolContext
 from google.genai import types
 
+from shared.args import ArgumentFormatError, as_list
+
 from . import spec_logic as logic
 from .schema import (
     ChangeEntry,
@@ -39,6 +41,18 @@ _SIZES = get_args(RelativeSize)
 
 RequirementKind = Literal["functional", "non_functional"]
 TextSection = Literal["goals", "success_metrics", "in_scope", "out_of_scope", "constraints", "assumptions"]
+
+
+def _strings(value: object, name: str) -> tuple[Optional[list[str]], Optional[dict]]:
+    """A list-of-text argument, tolerating models that send it as JSON text. Never lets a string
+    be iterated character by character (one bad call once created 557 one-letter questions)."""
+    try:
+        items = as_list(value, name)
+    except ArgumentFormatError as exc:
+        return None, {"error": f"Nothing was recorded. {exc}"}
+    if not all(isinstance(i, str) for i in items):
+        return None, {"error": f"Nothing was recorded. {name} must be a list of text items."}
+    return items, None
 
 
 def _invalid(name: str, value: object, allowed) -> Optional[dict]:
@@ -105,6 +119,9 @@ def add_open_questions(questions: list[str], tool_context: ToolContext) -> dict:
     Args:
         questions: The questions, highest-impact first.
     """
+    questions, err = _strings(questions, "questions")
+    if err:
+        return err
     spec = logic.load_spec(tool_context.state)
     ids = []
     for text in questions:
@@ -151,6 +168,9 @@ def add_text_items(section: TextSection, texts: list[str], source: Source, tool_
         return err
     if section == "assumptions":
         source = "assumption"
+    texts, err = _strings(texts, "texts")
+    if err:
+        return err
     spec = logic.load_spec(tool_context.state)
     ids = []
     for text in texts:
@@ -186,6 +206,9 @@ def add_requirement(
     if err := (_invalid("kind", kind, ("functional", "non_functional"))
                or _invalid("priority", priority, _PRIORITIES) or _invalid("source", source, _SOURCES)):
         return err
+    acceptance_criteria, err = _strings(acceptance_criteria, "acceptance_criteria")
+    if err:
+        return err
     section = "functional_requirements" if kind == "functional" else "non_functional_requirements"
     spec = logic.load_spec(tool_context.state)
     req = Requirement(
@@ -218,6 +241,9 @@ def add_user_story(
         acceptance_criteria: Concrete, checkable conditions.
     """
     if err := _invalid("priority", priority, _PRIORITIES) or _invalid("source", source, _SOURCES):
+        return err
+    acceptance_criteria, err = _strings(acceptance_criteria, "acceptance_criteria")
+    if err:
         return err
     spec = logic.load_spec(tool_context.state)
     story = UserStory(
@@ -275,6 +301,9 @@ def add_milestone(name: str, includes: list[str], relative_size: RelativeSize, t
         relative_size: 'S', 'M', 'L', or 'XL'.
     """
     if err := _invalid("relative_size", relative_size, _SIZES):
+        return err
+    includes, err = _strings(includes, "includes")
+    if err:
         return err
     spec = logic.load_spec(tool_context.state)
     if err := _unknown_deliverables(spec, includes):
@@ -336,6 +365,14 @@ def update_item(
         return err
     if relative_size is not None and (err := _invalid("relative_size", relative_size, _SIZES)):
         return err
+    if acceptance_criteria is not None:
+        acceptance_criteria, err = _strings(acceptance_criteria, "acceptance_criteria")
+        if err:
+            return err
+    if includes is not None:
+        includes, err = _strings(includes, "includes")
+        if err:
+            return err
     spec = logic.load_spec(tool_context.state)
     found = logic.find_item(spec, item_id)
     if found is None:

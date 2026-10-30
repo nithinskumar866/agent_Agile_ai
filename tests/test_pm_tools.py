@@ -218,7 +218,9 @@ def test_instruction_carries_live_spec_status(ctx):
 
 def test_agent_is_wired():
     assert app.root_agent is root_agent
-    assert len(root_agent.tools) == len(tools.ALL_TOOLS)
+    own = [t for t in root_agent.tools if callable(t)]
+    assert len(own) == len(tools.ALL_TOOLS)  # plus the optional company-memory toolset
+    assert len(root_agent.tools) - len(own) <= 1
 
 
 # ── approval requires explicit client authorization ──────────────────────────
@@ -343,3 +345,45 @@ def test_draft_publish_on_explicit_request(ctx):
     minimal_complete_spec(ctx)
     res = publish(ctx, "draft", message="Please publish the PRD so I can review it.")
     assert (res["version"], res["status"]) == (1, "in_review")
+
+
+# ── list arguments sent as text (seen live with Nemotron) ────────────────────
+
+def test_questions_sent_as_json_text_are_decoded_not_split_into_characters(ctx):
+    result = tools.add_open_questions('["Who signs off?", "What is the deadline?"]', ctx)
+    assert result["ids"] == ["Q-1", "Q-2"]
+    texts = [q.text for q in logic.load_spec(ctx.state).open_questions]
+    assert texts == ["Who signs off?", "What is the deadline?"]
+
+
+def test_several_lists_pasted_together_are_refused_and_record_nothing(ctx):
+    pasted = '["Who signs off?"]\n["What is the deadline?"]'
+    result = tools.add_open_questions(pasted, ctx)
+    assert "error" in result and "ONE JSON list" in result["error"]
+    assert logic.load_spec(ctx.state).open_questions == []
+
+
+def test_a_plain_sentence_is_never_iterated_as_a_list(ctx):
+    for call in (lambda: tools.add_open_questions("Who signs off?", ctx),
+                 lambda: tools.add_text_items("goals", "Collect emails", "client", ctx),
+                 lambda: tools.add_requirement("functional", "x", "must", "client", ctx,
+                                               acceptance_criteria="it works")):
+        assert "error" in call()
+    spec = logic.load_spec(ctx.state)
+    assert not spec.open_questions and not spec.goals and not spec.functional_requirements
+
+
+def test_other_list_tools_accept_json_text(ctx):
+    tools.add_text_items("goals", '["Collect emails"]', "client", ctx)
+    req = tools.add_requirement("functional", "Show a form", "must", "client", ctx,
+                                acceptance_criteria='["Form is visible", "Has one email box"]')
+    spec = logic.load_spec(ctx.state)
+    assert [g.text for g in spec.goals] == ["Collect emails"]
+    assert spec.functional_requirements[0].acceptance_criteria == ["Form is visible", "Has one email box"]
+    assert tools.add_milestone("MVP", f'["{req["id"]}"]', "S", ctx)["ok"]
+    assert tools.update_item(req["id"], "tighten", ctx, acceptance_criteria='["Form is visible"]')["ok"]
+    assert logic.load_spec(ctx.state).functional_requirements[0].acceptance_criteria == ["Form is visible"]
+
+
+def test_non_text_items_are_refused(ctx):
+    assert "error" in tools.add_open_questions([{"q": "x"}], ctx)

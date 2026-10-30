@@ -13,6 +13,9 @@ import os
 from google.adk.models.base_llm import BaseLlm
 
 NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+# Reasoning counts against this limit. At 16384 the QA agent spent all of it thinking about
+# the tests and never produced the tool call (finish_reason MAX_TOKENS), three times running.
+DEFAULT_MAX_TOKENS = 49152
 
 
 def build_model(name: str) -> str | BaseLlm:
@@ -30,6 +33,6 @@ def build_model(name: str) -> str | BaseLlm:
         # instead of LiteLLM silently falling back to OPENAI_API_KEY.
         api_key=os.getenv("NVIDIA_API_KEY") or "missing-NVIDIA_API_KEY",
         top_p=0.95,
-        max_tokens=16384,
+        max_tokens=int(os.getenv("NVIDIA_MAX_TOKENS", DEFAULT_MAX_TOKENS)),
         extra_body={"chat_template_kwargs": {"enable_thinking": thinking}},
     )
