@@ -250,3 +250,64 @@ from the repository, never taken from the project.
 runtime remain manual checks; only FastAPI and Flask apps can be started; the smoke requests are only as
 good as the QA agent's reading of the criteria.
 
+## 2026-11-10 — Client documents (RAG), built locally first
+
+**Retrieval is separable from the rest.** `shared/retrieval.py` (chunk by heading, rank, refuse) and
+`shared/knowledge.py` (collections, citations, screening) are the parts that matter; the ranking function is
+the only piece Vertex AI RAG Engine replaces. Both embedding models tried on the NVIDIA key were retired
+(HTTP 410), so local retrieval is BM25: no model, no download, and every ranking is explainable.
+
+**Refusing is a feature, tested.** A question the documents do not answer must return nothing. Measured
+on 22 golden questions: recall@3 1.00, MRR 0.96, refusal 1.00. The evaluation found a real flaw on its first
+run: the client's own name sits in every title, so "how many employees does Acme Bakery have" matched every
+document. Query words found in 60% or more of the passages are now ignored when judging coverage.
+
+**Documents are untrusted input, like uploads.** Passages pass through the guardrails with personal-data
+masking off (an FAQ's `orders@shop.example` is the answer, not a leak) but injection, hidden text and
+secrets always handled. Reviewing this exposed an evasion: a phrase split across line breaks slipped past
+the line-by-line check. Paragraphs are now read flattened as well as line by line; the line result wins when it
+finds everything, so a list keeps its other items.
+
+**Tenancy by folder.** One folder per client; a search names its collection, validated against the folders
+that exist, so no path can leave the knowledge root. On Google Cloud this becomes one corpus per tenant with IAM.
+
+**Keyword search has a known blind spot,** seen live: "delivery how far delivery area distance" missed a
+passage that says "within 8 km". Mitigated by telling the model to use short plain keywords and to retry once
+(INC-12); fixed properly by embeddings in the cloud phase.
+
+## 2026-11-10 — Packaging for serverless (container, not yet deployed)
+
+**One image, two modes.** The same image serves the HTTP API (`ADK_MODE=api`, for a deployment) or the API plus web
+UI (`web`, for demos). It listens on `$PORT`, runs as a non-root user, answers readiness on `/list-apps`, and
+carries no secret: keys are environment variables at run time. A runtime requirements file keeps pytest and the
+eval extra out of the image, and a test keeps its `google-adk` pin identical to development.
+
+**Verified by running it, not by reading it.** Built, started and checked: non-root (uid 10001), Node 22 present, no
+tests, docs or `.git` inside, healthy, RAG answers from inside the container, and in compose the agent container
+reaches the Toolbox container by service name and runs a real query. The build found a gap worth keeping: the
+example env file was being copied in; it is now excluded.
+
+**The QA test runner cannot run in the container,** because it needs a Docker engine. It fails cleanly ("Docker is not
+installed"). On Google Cloud it maps to the Agent Engine code-execution sandbox or a Cloud Run job. Docker-in-Docker
+or mounting the host socket would have worked but hands the container control of the host, which defeats the
+sandbox it exists to provide.
+
+**Not deployed.** The Cloud Run command in the README is a design. Sessions are local SQLite files inside the
+container, so a real deployment needs a session service (Agent Engine sessions or Cloud SQL).
+
+## 2026-11-10 — Cost estimate in the audit report
+
+**No price lives in code.** Prices change and differ by region and tier, so a number the code "knows" goes stale
+silently. `shared/pricing.py` reads a price file you own (`pricing.yaml`, else the shipped `pricing.example.yaml`
+with each example's source and date), matches the model name by longest substring, and bills thinking tokens as
+output unless the entry says otherwise. The report labels the result an estimate and names the file and its date.
+
+**Unpriced is not zero.** A model with no entry is listed as unpriced and left out of the total; a model that is
+free is priced at zero. The report says "Nothing could be priced yet" rather than printing a reassuring 0.
+
+**The model name is now recorded on every audited model call,** which is what makes the pricing possible. Older
+log lines without it show as "(model not recorded)".
+
+**`--as-model` is the useful part.** It prices the recorded tokens as if they had run on another model, so the
+Nemotron-to-Gemini decision and the customer's first question, what it costs, are answered from measured usage
+and not guessed. A full day of live testing came to about $0.34 on Gemini 2.5 Flash at the example list prices.

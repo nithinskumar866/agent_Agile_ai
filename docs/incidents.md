@@ -123,3 +123,17 @@ our code), or **OPEN** (known gap, no automated guard yet).
 - **Regression test:** `tests/test_qa_agent.py::test_a_conftest_missing_import_pytest_is_refused_before_it_can_be_locked`
 - **Regression test:** `tests/test_qa_agent.py::test_a_syntax_error_in_a_draft_test_is_refused_with_its_line`
 
+## INC-12: the documents had the answer and the PM said they did not
+- **When / status:** 2026-11-10, MITIGATED
+- **What happened:** found live while testing the knowledge base. Asked "how far do we deliver", the PM said
+  the documents do not mention it, although the FAQ says "We deliver within 8 km". It had searched for
+  `delivery how far delivery area distance`; keyword search needs most query words in a passage, and "far",
+  "area" and "distance" never appear. A confident, wrong "not covered".
+- **Cause:** lexical retrieval cannot bridge synonyms, and a longer query lowers the share of words that match.
+- **Mitigation:** the tool and the PM prompt say to use 1 to 3 plain keywords and to retry once before
+  concluding the documents do not cover it; an empty result repeats that advice. After the change the live PM
+  searched `delivery fee distance` and answered correctly with citations.
+- **Not fixed (by design):** a model can still phrase a query badly. Embeddings (Vertex AI RAG Engine) are the real
+  fix and are part of the cloud phase.
+- **Regression test:** `tests/test_knowledge.py::test_a_long_phrase_misses_but_plain_keywords_find_the_passage`
+- **Regression test:** `tests/test_knowledge.py::test_nothing_found_says_so_and_forbids_guessing`

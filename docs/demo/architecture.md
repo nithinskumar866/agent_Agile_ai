@@ -19,6 +19,7 @@ flowchart LR
     end
 
     PM <-->|read-only lookups| TB["MCP Toolbox for Databases<br/>company memory (SQLite)"]
+    PM <-->|cited, screened passages| KB["Client documents (RAG)<br/>one folder per client"]
     DEV <-->|read tools| FS["Filesystem MCP server<br/>sandboxed to one project folder"]
     DEV -->|gated writes| WS[("workspace/project")]
     QA -->|runs locked tests| DK["Docker sandbox<br/>no network, 1 CPU, 1 GB"]
@@ -70,9 +71,11 @@ a check in code cannot.
 | `adk web` | Agent deployed to Vertex AI Agent Engine, registered in Gemini Enterprise | Same ADK agents |
 | MCP Toolbox on a laptop | Toolbox on Cloud Run, backed by Cloud SQL or AlloyDB | Same `tools.yaml` format |
 | Audit JSONL file | Cloud Logging and Cloud Trace (OpenTelemetry) | ADK already emits traces |
+| BM25 over `knowledge/<client>/` | Vertex AI RAG Engine (embeddings, PDFs), one corpus per tenant | Only the retrieval step changes; citations, refusal and screening stay |
 | `shared/guardrails.py` | Model Armor, with the local screen kept as a second layer | Same screen-then-mask idea |
 | Docker test runner | Agent Engine code execution or a Cloud Run job | Same "run locked tests, grade by XML" contract |
 | `.env` keys | Secret Manager, one service account per agent with least privilege | Removes keys from files |
+| `docker compose up` (agent + Toolbox containers, built and tested) | Cloud Run services; the image already listens on `$PORT`, runs non-root and keeps no secret | The container is the deployable unit; only the deploy and a session service are missing |
 | Eval suite | Run on Gemini; compare with Nemotron | Same cases, two models |
 
 ## 4. In a customer's cloud: networking and tenancy (design, not built)

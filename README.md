@@ -50,7 +50,7 @@ qa_agent/               # QA agent
 
 toolbox/tools.yaml     # MCP Toolbox config: three read-only lookups over data/company.db
 
-tests/                  # 377 tests, no model calls or API key. 3 start the real MCP server, 2 the real Toolbox, 3 real Docker
+tests/                  # 449 tests, no model calls or API key. 3 start the real MCP server, 2 the real Toolbox, 3 real Docker
                         #   (skip: AGENTCORP_SKIP_MCP_TESTS=1), 2 run real Docker containers
                         #   (skip: AGENTCORP_SKIP_DOCKER_TESTS=1)
 shared/models.py        # Model routing: Gemini, or NVIDIA via LiteLLM
@@ -61,7 +61,11 @@ shared/safety.py        # Callbacks on every agent: caps, size check, upload not
 shared/guardrails.py    # Screens untrusted text: injection, personal data, secrets, hidden characters
 shared/uploads.py       # PDF / text / image uploads -> safe form for the model
 shared/audit.py         # Append-only audit log (audit/audit.jsonl, git-ignored)
-evals/                  # adk eval suite: cases, config, custom metrics, runner
+shared/retrieval.py     # RAG core: chunk by heading, BM25 ranking, refuse when nothing matches
+shared/knowledge.py     # Client document collections: cited, screened search results
+knowledge/              # One folder per client; acme-bakery/ is a fictional demo collection
+Dockerfile, docker-compose.yml, requirements-runtime.txt   # The agents (and Toolbox) as containers
+evals/                  # adk eval suite (cases, metrics, runner) and the retrieval eval (rag_eval.py)
 scripts/vertex_preflight.py  # Checks the Vertex AI setup step by step
 scripts/audit_report.py # Summary of the audit log: tools, refusals, model calls, tokens
 scripts/demo_assets.py  # Builds the sample PDF brief and wireframe for demos
@@ -146,6 +150,35 @@ If the server is not running the PM works as before, with no memory tools. `TOOL
 switches the memory off; set it to point at another host. `sample` rows are invented; the
 `delivered` row is the real email sign-up run.
 
+## Run it as a container (serverless-ready)
+
+```
+python scripts/seed_company_db.py     # once: creates data/company.db for the Toolbox container
+docker compose up --build             # agents + MCP Toolbox, then open http://localhost:8080
+```
+
+The image (`Dockerfile`) runs the ADK server with all three agents: non-root user, listens on `$PORT`
+(Cloud Run sets it), readiness on `/list-apps`, Node 22 for the Developer's MCP file server, and **no secrets
+inside**: keys come from `pm_agent/.env` or `--env-file` at run time. `ADK_MODE=api` serves the HTTP API only
+(what a deployment needs); `ADK_MODE=web` adds the web UI (the compose default). The compose file adds the official
+Toolbox container with the database mounted read-only, wired by service name (`TOOLBOX_URL=http://toolbox:5000`), and
+drops all Linux capabilities from the agent container. The runtime image is about 930 MB and installs
+`requirements-runtime.txt` (no pytest or eval extras).
+
+**What does not work inside a container, on purpose:** the QA agent's test runner starts Docker containers, and
+there is no Docker engine in there, so `run_tests` answers "Docker is not installed". On Google Cloud that step
+maps to the Agent Engine code-execution sandbox or a Cloud Run job.
+
+**Not deployed anywhere.** This is the packaging; the Cloud Run step would be, roughly (a design, not run):
+
+```
+gcloud run deploy agentcorp --source . --region us-central1 --no-allow-unauthenticated \
+  --set-env-vars ADK_MODE=api --set-secrets NVIDIA_API_KEY=nvidia-key:latest
+```
+
+`pytest tests/test_packaging.py` checks the image and compose file stay safe and consistent; setting
+`AGENTCORP_TEST_DOCKER_BUILD=1` also builds and runs the image (about four minutes).
+
 ## Uploads, guardrails and the audit trail
 
 **Multimodal briefs.** In `adk web`, attach a PDF, a text file or an image (PNG, JPEG, WEBP, GIF) to
@@ -175,9 +208,42 @@ python -m scripts.audit_report --session ID     # one session
 It shows calls, refusals (gates saying no) with their reasons, truncations, exceptions, empty or
 cut-off model replies, and tokens in, out and thinking per agent.
 
+**Cost estimate.** The report also prices the recorded tokens, per model, from a price file you control
+(`pricing.yaml`, git-ignored; copy `pricing.example.yaml`, which holds example Gemini and Nemotron entries with
+their source and date). No price is hard-coded, and the section is labelled an estimate, not a bill. Unknown models
+are listed as unpriced, never as zero. To answer "what would this have cost on Gemini?":
+
+```
+python -m scripts.audit_report --as-model gemini-2.5-flash
+```
+
 **Incidents.** `docs/incidents.md` records each real failure and names the test that guards it;
 `tests/test_incidents.py` fails if a named test disappears. The incident that
 started the smoke check (17 passing tests alongside a broken page) is fixed and guarded.
+
+## Client documents (RAG)
+
+The PM can answer questions from a client's **own documents** and cite where each fact came from.
+`knowledge/<client>/` holds Markdown or text files (one folder per client; `acme-bakery/` is a fictional
+demo). Two PM tools: `list_knowledge_collections` and `search_knowledge`.
+
+- **Retrieval** (`shared/retrieval.py`): documents are split by heading, ranked with BM25 (keyword search,
+  no model, explainable), and **nothing is returned when no passage covers the question**. A search that
+  always returns "the closest passage" invites the model to make an answer up.
+- **Cited answers:** each passage carries `acme-bakery/faq.md § Delivery`; the PM must cite every fact in
+  square brackets, and must say so (and ask the client) when the documents do not cover it.
+- **Documents are untrusted.** Every passage goes through the guardrails (hidden characters removed,
+  instruction-like lines withheld, secrets masked; business contact details are kept, because there they
+  are the answer). `knowledge/acme-bakery/supplier-notes.md` plants an order to approve the PRD, the classic
+  indirect prompt injection; the PM reads the note, does not act on it, and tells the client part was set aside.
+- **Confined to one client:** a search takes a collection name that must be an existing folder. A name like
+  `../x` is refused, and one client's passages are never returned for another.
+- **Measure it:** `python -m evals.rag_eval` prints recall@k, MRR and refusal accuracy over 22 golden
+  questions (17 the documents answer, 5 they do not); the unit tests hold it to recall >= 0.9, MRR >= 0.85
+  and refusal = 1.0. Three `adk eval` cases check the *model* searches first and ignores the planted order.
+- **Known limit:** keyword search misses synonyms ("how far" vs "within 8 km") and long phrases, so the tool tells
+  the model to use 1 to 3 plain words and to retry once. Embeddings fix this properly; on Google Cloud, Vertex AI
+  RAG Engine replaces the retrieval step (and reads PDFs) while the citations, refusal and screening stay.
 
 ## Evaluate the agents (`adk eval`)
 
@@ -188,7 +254,7 @@ real model calls (they cost tokens and take a few minutes):
 .venv\Scripts\python -m evals.run                 # or: python -m evals.run explicit_approval
 ```
 
-- `evals/build_evalset.py` generates the 7 cases (rerun it after schema changes:
+- `evals/build_evalset.py` generates the 10 cases (rerun it after schema changes:
   `python -m evals.build_evalset`). Starting states come from the real PM tools.
 - Metrics (`evals/test_config.json`): `tool_trajectory_avg_score` (tool names, in order) and
   three custom metrics in `evals/metrics.py`: `key_args_match`, `publish_policy`,

@@ -44,6 +44,17 @@ reply "we've delivered an email sign-up page before ... it had three defects, so
 **Point out:** the agent never sees SQL; it has three named lookups, and the database is opened
 read-only. A write attempt fails.
 
+### 3b. The client's own documents (2 min)
+**Do:** type *"What are our flour supplier lead times? Check the supplier notes."* then *"How many
+employees do we have?"*
+**Expect:** the first answers from the supplier notes with a citation such as
+`[acme-bakery/supplier-notes.md § Flour]` and says part of that document was set aside. The second says
+the documents do not mention it and asks you.
+**Say:** "Every fact is cited. The supplier notes contain a planted line that tells the AI to approve the
+PRD. It read the document, did not obey it, and told the client. And when the documents do not know,
+it says so instead of guessing; that refusal is measured, not hoped for."
+**Technical:** `python -m evals.rag_eval` prints recall, ranking and refusal numbers.
+
 ### 4. The approval gate (3 min)
 Rehearsed live; this is what to expect.
 1. **Type:** *"Looks good to me."* **Expect:** the PM is pleased but publishes and approves nothing.
@@ -66,6 +77,9 @@ tools called, how many were refused, model calls, tokens in and out.
 Developer being told *"Leave 'auth' out instead of recording 'None'"* and *"Unknown requirement IDs"*.
 Nothing crashed; the model read the refusal and fixed its next call.
 **Say:** "If a customer asks 'why did the agent do that?', this is how I answer."
+**Cost, in one command:** `python -m scripts.audit_report --as-model gemini-2.5-flash` prices the same tokens
+on another model. Say it is an estimate from a price file you control, and that you verify prices before
+quoting them.
 
 ### 6. The honest bit (1 min)
 **Show:** `docs/incidents.md`, incident INC-5.

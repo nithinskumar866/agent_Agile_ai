@@ -13,11 +13,12 @@
 | What the role asks for | Where it shows here |
 |---|---|
 | Build and orchestrate agents with ADK | Three ADK agents with hand-offs and shared state (`architecture.md` 1) |
+| Retrieval-augmented generation (RAG) | Local RAG over a client's documents: cited answers, refuses when not covered, screens planted instructions (`demo-script.md` step 3b). Vertex AI RAG Engine is the cloud step |
 | Securely connect LLMs to internal databases and productivity tools | MCP Toolbox, read-only, named lookups; Workspace is still to do |
 | Multimodal solutions | PDF and image briefs (`demo-script.md` step 2); video and voice not yet |
 | Security, governance and compliance | Gates, screening, masking, audit, sandboxes (`governance-and-cost.md`) |
 | Monitor, debug and troubleshoot agent behaviour | Audit log and report, ADK trace, incident register with regression tests |
-| Serverless, tenancy, secure networking | Design only (`architecture.md` 3 and 4); to be built on Google Cloud |
+| Serverless, tenancy, secure networking | Container image and compose stack built and tested (non-root, `$PORT`, no secrets inside); Cloud Run deploy, tenancy and networking are design only (`architecture.md` 3 and 4) |
 | Deploy and manage Gemini Enterprise | Not yet: this needs the Google Cloud phase |
 | Technical presentations at different levels | This pack, with separate talking points per audience |
 
