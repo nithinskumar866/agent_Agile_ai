@@ -49,16 +49,24 @@ qa_agent/               # QA agent
 
 toolbox/tools.yaml     # MCP Toolbox config: three read-only lookups over data/company.db
 
-tests/                  # 274 tests, no model calls or API key. 3 start the real MCP server, 2 the real Toolbox
+tests/                  # 351 tests, no model calls or API key. 3 start the real MCP server, 2 the real Toolbox, 2 real Docker
                         #   (skip: AGENTCORP_SKIP_MCP_TESTS=1), 2 run real Docker containers
                         #   (skip: AGENTCORP_SKIP_DOCKER_TESTS=1)
 shared/models.py        # Model routing: Gemini, or NVIDIA via LiteLLM
 shared/spec.py          # RequirementsSpec: the handoff contract every agent reads
 shared/policy.py        # What wording counts as "publish" / "approve"
 shared/testsuite.py     # TestSuite: the locked tests, and the rules the Dev agent obeys
+shared/safety.py        # Callbacks on every agent: caps, size check, upload notice, audit
+shared/guardrails.py    # Screens untrusted text: injection, personal data, secrets, hidden characters
+shared/uploads.py       # PDF / text / image uploads -> safe form for the model
+shared/audit.py         # Append-only audit log (audit/audit.jsonl, git-ignored)
 evals/                  # adk eval suite: cases, config, custom metrics, runner
 scripts/vertex_preflight.py  # Checks the Vertex AI setup step by step
+scripts/audit_report.py # Summary of the audit log: tools, refusals, model calls, tokens
+scripts/demo_assets.py  # Builds the sample PDF brief and wireframe for demos
 docs/decisions.md       # Architecture decision log
+docs/incidents.md       # Every real failure, its fix, and the regression test that guards it
+docs/demo/              # Customer demo pack: script, architecture, governance, talking points
 ```
 
 ## Run it
@@ -127,6 +135,39 @@ python scripts/seed_company_db.py             # once: creates data/company.db
 If the server is not running the PM works as before, with no memory tools. `TOOLBOX_URL=""`
 switches the memory off; set it to point at another host. `sample` rows are invented; the
 `delivered` row is the real email sign-up run.
+
+## Uploads, guardrails and the audit trail
+
+**Multimodal briefs.** In `adk web`, attach a PDF, a text file or an image (PNG, JPEG, WEBP, GIF) to
+a message. PDFs and text become extracted text; images go to the vision model. Before the model
+sees anything, `shared/guardrails.py` withholds lines that try to give the AI orders, masks
+emails, phone numbers, card and ID numbers and API keys, and removes hidden characters. The
+document is wrapped as client-supplied *data*, and the **system itself adds an "Upload notice"**
+to the next reply, so the client is told even if the model forgets. Typed messages are not scanned.
+Limits: text inside an image is not read or screened, names are not masked, and the screen is a
+filter, not a proof; the approval gates in code remain the real control.
+Try it with `docs/demo/assets/sample-brief.pdf` (rebuild: `python scripts/demo_assets.py`).
+
+**Safety net** (`shared/safety.py`, on all three agents): any tool result is capped at 40,000
+characters (`AGENTCORP_MAX_TOOL_RESULT_CHARS`); a conversation too large for the model gets a clear
+"start a new session" reply instead of a provider error; an unexpected tool exception becomes a short
+error the model can react to.
+
+**Audit trail.** Every tool call, model call and upload is appended to `audit/audit.jsonl`
+(`AGENTCORP_AUDIT_FILE` to move it, `AGENTCORP_AUDIT=0` to turn it off). Personal data and secrets
+are masked first. Read it with:
+
+```
+python -m scripts.audit_report                  # everything
+python -m scripts.audit_report --session ID     # one session
+```
+
+It shows calls, refusals (gates saying no) with their reasons, truncations, exceptions, empty or
+cut-off model replies, and tokens in, out and thinking per agent.
+
+**Incidents.** `docs/incidents.md` records each real failure and names the test that guards it;
+`tests/test_incidents.py` fails if a named test disappears. One incident (a passing test suite
+alongside a broken page) is marked OPEN until QA gets a real-run smoke check.
 
 ## Evaluate the agents (`adk eval`)
 

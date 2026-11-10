@@ -192,3 +192,35 @@ a JavaScript syntax error, the table never created). `sample` rows are labelled 
 **Windows detail.** `with sqlite3.connect()` commits but does not close, which locked the file
 for the next unlink; the seed script and tests close explicitly.
 
+## 2026-11-10 — Safety net, audit trail, upload guardrails, incident register
+
+**One safety net on every agent, through ADK callbacks.** Model and tool callbacks (`shared/safety.py`)
+cap tool results, refuse to call the model on an oversized conversation, turn unexpected tool
+exceptions into short errors, and write the audit log. They exist because two 2 MB tool errors once
+made a session permanently unusable.
+
+**The audit log is evidence, not a debug print.** One JSON line per tool call, model call and
+upload; personal data and secrets masked; values cut *before* masking, because masking a multi-megabyte
+string with an unbounded regex took minutes (a test caught it). `scripts/audit_report.py` summarises it,
+including refusals by reason and empty or cut-off model replies, so model quality becomes a number.
+
+**Uploads are untrusted and rewritten before the model sees them.** PDFs and text become screened,
+wrapped extracted text; images pass through after real-bytes, size and count checks. The screen
+withholds instruction-like lines, masks personal data and secrets, and removes hidden characters. It
+is a filter, not a proof. The gates in tool code remain the control. Typed messages are not scanned,
+because a client may legitimately type an email address.
+
+**The client is told by code, not by the model.** A live rehearsal showed the model mentioned the
+withheld line in one run and not in the next. The system now appends an "Upload notice" to the first
+real reply, once per file per session. A control that depends on the model remembering is not a control.
+
+**Quarantine, not blocking.** Risky text is withheld and the rest of the document is used; blocking
+whole documents would reject most real briefs. Picture-derived requirements are recorded as
+`inferred`, so the existing approval gate forces the client to confirm them.
+
+**Incidents become tests.** `docs/incidents.md` lists real failures with a regression test each;
+`tests/test_incidents.py` fails if a named test is missing, or if an incident has no test and is not
+marked OPEN. INC-5 (17 tests passed on a broken page) is OPEN until QA has a smoke check.
+
+**Not done on purpose:** machine-reading text inside images, masking names (needs NER), A2A.
+
