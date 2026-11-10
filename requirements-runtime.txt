@@ -1,0 +1,7 @@
+# What the container needs to RUN the agents. requirements.txt adds the development and evaluation tools
+# (pytest, the adk eval extra) that do not belong in a deployed image. A test keeps the google-adk pin identical.
+google-adk[mcp,toolbox]==2.11.0
+litellm>=1.105
+pyyaml>=6.0
+pypdf>=5.0
+pyflakes>=3.2

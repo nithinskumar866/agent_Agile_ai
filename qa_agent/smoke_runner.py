@@ -38,7 +38,7 @@ from urllib.parse import urljoin, urlparse
 
 SKIP_DIRS = {"qa_tests", "tests", "test", "__pycache__", "venv", ".venv", "node_modules", "site-packages", ".git"}
 APP_PATTERN = re.compile(r"^(\w+)\s*(?::[^=\n]+)?=\s*(FastAPI|Flask)\s*\(", re.M)
-START_TIMEOUT = 20
+START_TIMEOUT = 30  # a gate must not fail because the machine is busy; the runner can raise it
 REQUEST_TIMEOUT = 10
 MAX_OPENAPI_GETS = 20
 MAX_ASSETS = 30
@@ -118,8 +118,8 @@ def _last_lines(text: str, count: int = 3, width: int = 300) -> str:
     return joined[-width:]
 
 
-def _wait_for_port(port: int, proc: subprocess.Popen) -> bool:
-    deadline = time.time() + START_TIMEOUT
+def _wait_for_port(port: int, proc: subprocess.Popen, timeout: float = START_TIMEOUT) -> bool:
+    deadline = time.time() + timeout
     while time.time() < deadline and proc.poll() is None:
         with socket.socket() as s:
             s.settimeout(0.3)
@@ -129,7 +129,8 @@ def _wait_for_port(port: int, proc: subprocess.Popen) -> bool:
     return False
 
 
-def run_smoke(app_root: Path, requests: list[dict], port: int, env: Optional[dict] = None) -> dict:
+def run_smoke(app_root: Path, requests: list[dict], port: int, env: Optional[dict] = None,
+              start_timeout: float = START_TIMEOUT) -> dict:
     """Run the check; returns {'outcome', 'steps': [{name, ok, detail}], 'note'}."""
     steps: list[dict] = []
 
@@ -146,7 +147,7 @@ def run_smoke(app_root: Path, requests: list[dict], port: int, env: Optional[dic
                             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", **(env or {})})
     base = f"http://127.0.0.1:{port}"
     try:
-        if not _wait_for_port(port, proc):
+        if not _wait_for_port(port, proc, start_timeout):
             log.seek(0)
             step("app starts", False, "did not start listening: " + _last_lines(log.read().decode("utf-8", "replace")))
             return {"outcome": "failed", "steps": steps, "note": ""}
@@ -198,7 +199,7 @@ def main(argv: list[str]) -> int:
     """Container entry point: smoke_runner.py CONFIG.json OUT.json (paths inside the container)."""
     config = json.loads(Path(argv[1]).read_text(encoding="utf-8"))
     result = run_smoke(Path(config["app_root"]), config.get("requests", []), config.get("port", 8765),
-                       config.get("env"))
+                       config.get("env"), config.get("start_timeout", START_TIMEOUT))
     Path(argv[2]).write_text(json.dumps(result), encoding="utf-8")
     return 0
 

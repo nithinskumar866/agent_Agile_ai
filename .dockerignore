@@ -1,0 +1,34 @@
+# Keep the image small, and keep secrets and local state out of it.
+.git
+.gitattributes
+.venv
+.tools
+.pytest_cache
+__pycache__
+*.pyc
+
+# Secrets: keys reach the container as environment variables at run time, never inside the image.
+.env
+*.env
+**/.env
+
+# Local state and generated output
+.adk
+**/.adk
+data
+audit
+workspace
+
+# Not needed to run the agents
+tests
+evals
+docs
+scripts
+toolbox
+/README.md
+requirements.txt
+pytest.ini
+docker-compose.yml
+Dockerfile
+.dockerignore
+**/.env.example

@@ -1,0 +1,38 @@
+# The agents plus MCP Toolbox, as they would run in a deployment.
+#
+#   python scripts/seed_company_db.py        # once: creates data/company.db
+#   docker compose up --build                # then open http://localhost:8080
+#
+# Keys come from pm_agent/.env at run time (never baked into an image). If that file is missing the
+# containers still start, and a model call fails with a clear authentication error.
+services:
+  toolbox:
+    image: us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:1.15.0
+    working_dir: /app
+    command: ["--config", "/app/toolbox/tools.yaml", "--address", "0.0.0.0", "--port", "5000", "--disable-version-check"]
+    volumes:
+      - ./toolbox:/app/toolbox:ro
+      - ./data:/app/data:ro        # the database is opened read-only in tools.yaml as well
+    restart: unless-stopped
+
+  agent:
+    build: .
+    image: agentcorp:local
+    env_file:
+      - path: pm_agent/.env
+        required: false
+    environment:
+      ADK_MODE: web                          # "api" for the API only
+      PORT: "8080"
+      TOOLBOX_URL: http://toolbox:5000       # the service name, resolved by compose's network
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./audit:/app/audit
+      - ./workspace:/app/workspace
+    depends_on:
+      - toolbox
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

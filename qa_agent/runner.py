@@ -192,6 +192,7 @@ def _smoke(project_path: Path, suite: TestSuite, deps: Path, run_root: Path) -> 
     shutil.copy(Path(__file__).with_name("smoke_runner.py"), ctl / "smoke_runner.py")
     (ctl / "smoke.json").write_text(json.dumps({
         "app_root": "/work" if app_dir == "." else f"/work/{app_dir}", "port": 8765,
+        "start_timeout": _timeout("AGENTCORP_QA_SMOKE_START_TIMEOUT", 30),
         "requests": [r.model_dump() for r in suite.smoke_requests]}), encoding="utf-8")
     name = f"agentcorp-qa-smoke-{run_root.name}"
     proc = _docker(

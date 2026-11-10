@@ -324,7 +324,7 @@ def test_real_sandbox_smoke_passes_a_good_app_and_catches_inc5_style_defects(ws,
     good = make_project(ws / "good")
     (good / "backend" / "requirements.txt").write_text(reqs, encoding="utf-8")
     outcome = runner.run_suite(good, suite)
-    assert outcome.exit_code == 0 and outcome.smoke.outcome == "passed", [s for s in outcome.smoke.steps if not s.ok]
+    assert outcome.exit_code == 0 and outcome.smoke.outcome == "passed", (outcome.exit_code, outcome.output[-500:], outcome.smoke)
     assert any(s.name == "asset /static/app.js" and s.ok for s in outcome.smoke.steps)
 
     broken_src = GOOD_APP.replace('@app.on_event("startup")\ndef init_db():', "def init_db():")
@@ -332,6 +332,6 @@ def test_real_sandbox_smoke_passes_a_good_app_and_catches_inc5_style_defects(ws,
     (broken / "backend" / "requirements.txt").write_text(reqs, encoding="utf-8")
     outcome = runner.run_suite(broken, suite)
     assert outcome.exit_code == 0  # the acceptance tests are green...
-    assert outcome.smoke.outcome == "failed"  # ...and the real run is not
+    assert outcome.smoke.outcome == "failed", outcome.smoke  # ...and the real run is not
     bad = [s.name for s in outcome.smoke.steps if not s.ok]
     assert "POST /signup (locked smoke request)" in bad and any("app.js" in n for n in bad), bad
