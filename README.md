@@ -45,11 +45,12 @@ qa_agent/               # QA agent
 ├── prompt.py           # QA role: tests from criteria only, never weaken a test
 ├── tools.py            # inspect, write/lock the suite, run_tests, report
 ├── logic.py            # Criteria IDs, coverage, grading, report rendering
-└── runner.py           # The Docker test runner (the only code that executes generated code)
+├── runner.py           # The Docker runner: tests, then the smoke check (the only code that executes generated code)
+└── smoke_runner.py     # Real-run smoke check, copied into the sandbox (standard library only)
 
 toolbox/tools.yaml     # MCP Toolbox config: three read-only lookups over data/company.db
 
-tests/                  # 351 tests, no model calls or API key. 3 start the real MCP server, 2 the real Toolbox, 2 real Docker
+tests/                  # 377 tests, no model calls or API key. 3 start the real MCP server, 2 the real Toolbox, 3 real Docker
                         #   (skip: AGENTCORP_SKIP_MCP_TESTS=1), 2 run real Docker containers
                         #   (skip: AGENTCORP_SKIP_DOCKER_TESTS=1)
 shared/models.py        # Model routing: Gemini, or NVIDIA via LiteLLM
@@ -117,7 +118,16 @@ Needs **Docker Desktop running**. Flow, each step enforced in code:
 throwaway copy of the project with **no network**, 1 CPU, 1 GB memory, no Linux capabilities,
 and a read-only root filesystem. The test files come from the locked copy in session state,
 and pytest gets its own config, so editing tests, adding a `conftest.py`, or a `pytest.ini` on
-disk changes nothing. Only the Python app folder is tested; frontend code is not executed.
+disk changes nothing. The acceptance tests cover the Python app folder only.
+
+**Real-run smoke check.** Passing tests are not enough (17 of 17 once passed on a broken page, see
+`docs/incidents.md` INC-5), so `run_tests` then starts the **real** FastAPI or Flask app on a fresh
+copy in a second sandbox container and uses it like a visitor: the page and every stylesheet, script and
+image it links to must be served, every plain GET endpoint the app lists must not crash, and the QA
+agent's locked `smoke_requests` (a valid-input journey such as `POST /signup`) must get an accepted
+status. JavaScript files are syntax-checked with `node --check` (parse only). A run is `passed` only if
+both the tests and the smoke check pass, and a web app cannot be locked without a smoke request. No
+browser is driven, so layout, mobile behaviour and the script's runtime behaviour stay manual checks.
 
 ## Company memory (MCP Toolbox for Databases)
 
@@ -166,8 +176,8 @@ It shows calls, refusals (gates saying no) with their reasons, truncations, exce
 cut-off model replies, and tokens in, out and thinking per agent.
 
 **Incidents.** `docs/incidents.md` records each real failure and names the test that guards it;
-`tests/test_incidents.py` fails if a named test disappears. One incident (a passing test suite
-alongside a broken page) is marked OPEN until QA gets a real-run smoke check.
+`tests/test_incidents.py` fails if a named test disappears. The incident that
+started the smoke check (17 passing tests alongside a broken page) is fixed and guarded.
 
 ## Evaluate the agents (`adk eval`)
 

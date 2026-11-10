@@ -69,9 +69,11 @@ Nothing crashed; the model read the refusal and fixed its next call.
 
 ### 6. The honest bit (1 min)
 **Show:** `docs/incidents.md`, incident INC-5.
-**Say:** "All 17 acceptance tests passed and the page was still broken. I found that by running it.
-Every incident here has a regression test, except this one, which I have marked OPEN with the fix
-planned. I would rather show you the gap than hide it."
+**Say:** "All 17 acceptance tests passed and the page was still broken. I found that by running it:
+the stylesheet was never served, the script had a syntax error, and the database table was only
+created by the test setup. So 'passed' now also requires a real-run smoke check: the actual app is
+started on a fresh copy and used like a visitor would. I rebuilt those three defects as a test, and
+the check catches all of them. I would rather show you how it failed than hide it."
 
 ### 7. Close (30 s)
 **Say:** "Today this runs locally. The design for Google Cloud is on the last page of the

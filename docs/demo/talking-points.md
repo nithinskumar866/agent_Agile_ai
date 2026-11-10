@@ -10,8 +10,8 @@ engineers want mechanisms, security reviewers want evidence and limits.
   requested politely in a prompt.
 - **Evidence:** every action is logged. If something goes wrong we can show exactly what the agent
   did, and the same mistake cannot return unnoticed because each incident becomes a permanent test.
-- **Honesty:** it is a working prototype. It found real problems with itself, and I can show you the
-  one that is still open.
+- **Honesty:** it is a working prototype. It found real problems with itself, including a test suite that
+  passed on a broken page, and I can show you how that became a permanent check.
 - **Ask:** which workflow would you trust it with first, and who would be the human approver?
 
 ## Engineer or architect (10 minutes)

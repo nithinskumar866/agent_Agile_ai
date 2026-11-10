@@ -48,18 +48,23 @@ our code), or **OPEN** (known gap, no automated guard yet).
 - **Regression test:** `tests/test_pm_tools.py::test_approval_refused_when_the_client_message_is_unavailable`
 
 ## INC-5: 17 of 17 tests passed and the page was broken
-- **When / status:** 2026-10-30, **OPEN**
+- **When / status:** 2026-10-30 found; 2026-11-10 FIXED by the real-run smoke check
 - **What happened:** QA's report said PASSED. Running the app by hand found three defects:
   `style.css` and `app.js` were never served, `app.js` had a syntax error, and the `emails` table
   was never created outside the test setup. All three are invisible to API-level tests.
 - **Cause:** the tests exercised the server's answers, never the real startup or the files the
   page needs.
-- **Mitigation so far:** the three bugs were reported to the Dev agent and fixed; the QA report
-  already lists "needs a person" checks.
-- **Still to do:** a QA smoke check that starts the real app on a fresh folder, fetches the page
-  and its assets, syntax-checks the JavaScript and submits one valid input, and must pass before
-  "passed" can be reported.
-- **Regression test:** none yet (open)
+- **Fix:** `run_tests` now ends with a real-run smoke check (`qa_agent/smoke_runner.py`). In the
+  sandbox it starts the actual app on a fresh copy with no data files, fetches the page and every
+  stylesheet, script and image it links to, requests every plain GET endpoint the app lists, and sends
+  the QA agent's locked smoke requests (a valid-input journey such as `POST /signup`). JavaScript is
+  syntax-checked with `node --check`. A run is `passed` only if the smoke check also passes, and a web
+  app cannot be locked without at least one smoke request.
+- **Still not covered:** nothing clicks through the page in a browser, so layout, mobile behaviour and
+  what the script does remain manual checks. Only FastAPI and Flask apps can be started.
+- **Regression test:** `tests/test_smoke.py::test_inc5_the_three_defects_that_passed_17_tests_are_all_caught`
+- **Regression test:** `tests/test_smoke.py::test_passing_tests_are_not_enough_if_the_smoke_check_fails`
+- **Regression test:** `tests/test_smoke.py::test_real_sandbox_smoke_passes_a_good_app_and_catches_inc5_style_defects`
 
 ## INC-6: the model answered with reasoning only
 - **When / status:** 2026-10-27 onward, MITIGATED
@@ -104,3 +109,17 @@ our code), or **OPEN** (known gap, no automated guard yet).
 - **Known limit:** text inside an image is not machine-read, so it is not screened.
 - **Regression test:** `tests/test_guardrails.py::test_a_pdf_brief_is_extracted_screened_and_wrapped_as_data`
 - **Regression test:** `tests/test_guardrails.py::test_instructions_aimed_at_the_ai_are_withheld`
+
+## INC-11: a locked test suite that could not run, and could not be repaired
+- **When / status:** 2026-11-10, FIXED
+- **What happened:** found live, while proving the smoke check. QA's `conftest.py` used `@pytest.fixture`
+  without `import pytest`. Every run died at collection ("pytest produced no results"). Because locked tests
+  change only with the PRD, QA could not fix a missing import; the flow bounced Dev to QA to the Product
+  Manager, asking the client to change a requirement over a typo.
+- **Cause:** nothing checked the draft tests before they were locked.
+- **Fix:** `write_test_suite` now statically checks every draft test file (syntax errors, and names used but
+  never imported or defined, via pyflakes) and refuses the whole write with the file and line. It does not
+  check the app's own imports, because the code does not exist yet when tests are written.
+- **Regression test:** `tests/test_qa_agent.py::test_a_conftest_missing_import_pytest_is_refused_before_it_can_be_locked`
+- **Regression test:** `tests/test_qa_agent.py::test_a_syntax_error_in_a_draft_test_is_refused_with_its_line`
+

@@ -220,7 +220,33 @@ whole documents would reject most real briefs. Picture-derived requirements are 
 
 **Incidents become tests.** `docs/incidents.md` lists real failures with a regression test each;
 `tests/test_incidents.py` fails if a named test is missing, or if an incident has no test and is not
-marked OPEN. INC-5 (17 tests passed on a broken page) is OPEN until QA has a smoke check.
+marked OPEN. INC-5 (17 tests passed on a broken page) was OPEN until the smoke check below.
 
 **Not done on purpose:** machine-reading text inside images, masking names (needs NER), A2A.
+
+## 2026-11-10 — QA real-run smoke check (closes INC-5)
+
+**"Passed" now means the real app worked, not only that tests passed.** 17 of 17 acceptance tests once
+passed on a page with three defects the tests could not see. `run_tests` now adds a third sandbox
+container: the actual app is started on a fresh copy of the project (no database, no test setup) and
+used like a visitor. A run is `passed` only if the acceptance tests and the smoke check both pass.
+
+**Code decides what is checked; the model supplies only what it can know.** Fixed in code
+(`qa_agent/smoke_runner.py`): the app starts; `GET /` is not a 5xx; every local stylesheet, script and
+image the page links to is served; every plain GET endpoint the app's OpenAPI document lists is not a
+5xx. Supplied by the QA agent and locked with the tests: smoke requests with valid input (for example
+`POST /signup`), because only QA knows what valid input is. A web app (FastAPI or Flask in the stack)
+cannot be locked without at least one, so the coder cannot loosen the check.
+
+**JavaScript is syntax-checked on the host with `node --check`.** The sandbox image has no Node, and
+`--check` only parses. If Node is missing the report says JavaScript was NOT checked, rather than
+passing silently.
+
+**Same sandbox limits as the tests** (no network except the container's own loopback, 1 CPU, 1 GB, no
+capabilities, read-only root). The smoke script is standard-library only and is copied into the container
+from the repository, never taken from the project.
+
+**Limits, stated in the report:** no browser, so layout, mobile behaviour and what the script does at
+runtime remain manual checks; only FastAPI and Flask apps can be started; the smoke requests are only as
+good as the QA agent's reading of the criteria.
 

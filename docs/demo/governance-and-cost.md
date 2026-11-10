@@ -25,8 +25,9 @@ do I prove it afterwards?"*
 - The screen is a **filter, not a proof**: an attacker can phrase an instruction it does not match.
   The code gates are the real control; the filter reduces exposure.
 - **Text inside an image** is not machine-read, so it is not screened. **Names** are not masked.
-- The QA agent's "passed" once coexisted with a broken page (INC-5). It is marked OPEN; the planned
-  fix is a smoke check that runs the real app before "passed" can be reported.
+- The QA agent's "passed" once coexisted with a broken page (INC-5). "Passed" now also needs a real-run
+  smoke check (the real app started on a fresh copy; page, files, JavaScript syntax, a valid-input
+  request). It does not click through the page in a browser, so layout and mobile behaviour stay manual.
 - Model behaviour is not under our control: empty and cut-off replies happen (INC-6, INC-8). We
   measure them rather than pretend they do not.
 - This is a prototype on a laptop. It is not deployed, not load-tested, and has no per-user
