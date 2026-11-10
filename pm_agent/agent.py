@@ -8,6 +8,8 @@ from google.adk.apps import App
 from google.adk.apps._configs import EventsCompactionConfig
 from google.genai import types
 
+from shared.safety import agent_callbacks
+
 from dev_agent.agent import dev_agent
 from qa_agent.agent import qa_agent
 from .company_memory import company_memory_toolset
@@ -25,6 +27,7 @@ root_agent = LlmAgent(
     tools=[*ALL_TOOLS, *([memory] if memory else [])],
     sub_agents=[dev_agent, qa_agent],
     generate_content_config=types.GenerateContentConfig(temperature=0.3),
+    **agent_callbacks(),
 )
 
 app = App(

@@ -7,6 +7,8 @@ from google.adk.agents import LlmAgent
 from google.adk.apps import App
 from google.genai import types
 
+from shared.safety import agent_callbacks
+
 from .config import MODEL
 from .prompt import instruction
 from .tools import ALL_DEV_TOOLS
@@ -23,6 +25,7 @@ dev_agent = LlmAgent(
     # Python tools, the shared test runner, and read-only MCP file tools for the project sandbox.
     tools=[*ALL_DEV_TOOLS, run_tests, ProjectWorkspaceToolset()],
     generate_content_config=types.GenerateContentConfig(temperature=0.2),
+    **agent_callbacks(),
 )
 
 # Discoverable by adk web as a standalone app if selected directly. A clone, because

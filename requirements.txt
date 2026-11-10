@@ -1,4 +1,5 @@
 google-adk[mcp,eval,toolbox]==2.11.0   # mcp: MCP SDK (tested 2.3.0); eval: adk eval + Vertex AI SDK; toolbox: MCP Toolbox client
+pypdf>=5.0   # reads uploaded PDF briefs
 litellm>=1.105
 pyyaml>=6.0
 pytest>=9.0

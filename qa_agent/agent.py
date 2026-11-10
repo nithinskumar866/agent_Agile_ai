@@ -8,6 +8,7 @@ from google.genai import types
 
 from dev_agent.config import MODEL as DEV_MODEL  # also loads pm_agent/.env
 from shared.models import build_model
+from shared.safety import agent_callbacks
 
 from .prompt import instruction
 from .tools import ALL_QA_TOOLS
@@ -23,6 +24,7 @@ qa_agent = LlmAgent(
     instruction=instruction,
     tools=ALL_QA_TOOLS,
     generate_content_config=types.GenerateContentConfig(temperature=0.2),
+    **agent_callbacks(),
 )
 
 # Standalone copy for adk web; the original becomes the PM's sub-agent.
