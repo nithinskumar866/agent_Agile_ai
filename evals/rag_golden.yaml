@@ -1,0 +1,32 @@
+# Golden questions for the acme-bakery knowledge collection (see knowledge/README.md).
+#
+# answerable: a passage from `doc` that contains `must_contain` should appear among the top results.
+# unanswerable: the documents do not cover it, so retrieval must return NOTHING (a RAG system that
+#               always returns "the closest passage" invites the model to make an answer up).
+collection: acme-bakery
+
+answerable:
+  - {q: "When do you open on Sundays?",                       doc: faq.md,                      must_contain: "8:00 to 14:00"}
+  - {q: "How far do you deliver?",                            doc: faq.md,                      must_contain: "8 km"}
+  - {q: "What is the delivery fee?",                          doc: faq.md,                      must_contain: "60 rupees"}
+  - {q: "How much notice do custom cakes need?",              doc: faq.md,                      must_contain: "3 days"}
+  - {q: "Can you guarantee a product is nut-free?",           doc: faq.md,                      must_contain: "cannot guarantee"}
+  - {q: "What happens if a cake arrives damaged?",            doc: faq.md,                      must_contain: "refund or replace"}
+  - {q: "How long do you keep newsletter email addresses?",   doc: privacy-policy.md,           must_contain: "24 months"}
+  - {q: "Do you sell customer data?",                         doc: privacy-policy.md,           must_contain: "never sell"}
+  - {q: "How do subscribers unsubscribe?",                    doc: privacy-policy.md,           must_contain: "unsubscribe link"}
+  - {q: "Is double opt-in required?",                         doc: privacy-policy.md,           must_contain: "Double opt-in"}
+  - {q: "What colour are the primary buttons?",               doc: brand-guidelines.md,         must_contain: "Warm Crust"}
+  - {q: "Which font do headings use?",                        doc: brand-guidelines.md,         must_contain: "Fraunces"}
+  - {q: "What contrast ratio is required for text?",          doc: brand-guidelines.md,         must_contain: "4.5:1"}
+  - {q: "When is the newsletter sent?",                       doc: newsletter-operations.md,    must_contain: "Fridays"}
+  - {q: "Who owns the subscriber list?",                      doc: newsletter-operations.md,    must_contain: "Priya Nair"}
+  - {q: "What is the subscriber target for the first year?",  doc: newsletter-operations.md,    must_contain: "500 subscribers"}
+  - {q: "What is the lead time for flour?",                   doc: supplier-notes.md,           must_contain: "2 days"}
+
+unanswerable:
+  - "What is the capital of France?"
+  - "How many employees does Acme Bakery have?"
+  - "Which cryptocurrency do you accept?"
+  - "What is the chief executive's salary?"
+  - "Do you offer wedding dress alterations?"

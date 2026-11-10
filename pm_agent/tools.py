@@ -17,6 +17,7 @@ from google.genai import types
 from shared.args import ArgumentFormatError, as_list
 
 from . import spec_logic as logic
+from .knowledge_tools import KNOWLEDGE_TOOLS
 from .schema import (
     ChangeEntry,
     TEXT_SECTIONS,
@@ -494,4 +495,5 @@ ALL_TOOLS = [
     remove_item,
     review_spec,
     publish_prd,
+    *KNOWLEDGE_TOOLS,
 ]

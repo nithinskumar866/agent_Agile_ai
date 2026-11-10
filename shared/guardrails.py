@@ -107,8 +107,9 @@ def _luhn_ok(digits: str) -> bool:
     return total % 10 == 0
 
 
-def mask_sensitive(text: str, findings: Counter) -> str:
-    """Mask secrets, emails, cards, government IDs and phone numbers; record counts only."""
+def mask_sensitive(text: str, findings: Counter, personal: bool = True) -> str:
+    """Mask secrets and, unless `personal` is False, emails, cards, government IDs and phone numbers;
+    record counts only."""
     def sub(kind: str, label: str, pattern: re.Pattern, token: str, text: str, check=None) -> str:
         def repl(m: re.Match) -> str:
             if check and not check(m.group(0)):
@@ -118,6 +119,8 @@ def mask_sensitive(text: str, findings: Counter) -> str:
         return pattern.sub(repl, text)
 
     text = sub("secret", "secret", _SECRETS, "[SECRET]", text)
+    if not personal:
+        return text
     text = sub("pii", "email", _EMAIL, "[EMAIL]", text)
     text = sub("pii", "card number", _CARD, "[CARD]", text,
                check=lambda s: 13 <= len(re.sub(r"\D", "", s)) <= 19 and _luhn_ok(re.sub(r"\D", "", s)))
@@ -126,30 +129,57 @@ def mask_sensitive(text: str, findings: Counter) -> str:
     return text
 
 
+def _scrub(segment: str, findings: Counter) -> tuple[str, int]:
+    """Replace every sentence of `segment` that looks like an instruction to the AI."""
+    kept, hits = [], 0
+    for sentence in _SENTENCE_END.split(segment):
+        hit = next((name for name, rx in _INJECTION.items() if rx.search(sentence)), None)
+        if hit:
+            findings[("injection", hit)] += 1
+            hits += 1
+            kept.append(INJECTION_PLACEHOLDER)
+        else:
+            kept.append(sentence)
+    return " ".join(kept), hits
+
+
 def _quarantine_injection(text: str, findings: Counter) -> str:
-    lines = []
-    for line in text.split("\n"):
-        kept = []
-        for sentence in _SENTENCE_END.split(line):
-            hit = next((name for name, rx in _INJECTION.items() if rx.search(sentence)), None)
-            if hit:
-                findings[("injection", hit)] += 1
-                kept.append(INJECTION_PLACEHOLDER)
-            else:
-                kept.append(sentence)
-        lines.append(" ".join(kept))
-    return "\n".join(lines)
+    """Each paragraph is read twice: flattened to one line, because an attacker can split a phrase
+    across line breaks ("ignore / all previous / instructions") to slip past a line-by-line check, and
+    line by line, because chat-template tags like "system:" only count at the start of a line.
+    A paragraph with nothing in it is returned untouched, line breaks and all."""
+    parts = re.split(r"(\n\s*\n)", text)
+    for i, para in enumerate(parts):
+        if not para.strip() or i % 2:  # blank, or a separator between paragraphs
+            continue
+        flat_findings, line_findings = Counter(), Counter()
+        flat, flat_hits = _scrub(" ".join(para.split()), flat_findings)
+        scrubbed = [_scrub(line, line_findings) for line in para.split("\n")]
+        line_hits = sum(hits for _, hits in scrubbed)
+        if not flat_hits and not line_hits:
+            continue
+        # Prefer the line-by-line result: it removes only the offending sentence and keeps the other
+        # lines of a list. Fall back to the flattened one when it found more (a phrase split by line breaks).
+        if line_hits >= flat_hits:
+            parts[i], found = "\n".join(text for text, _ in scrubbed), line_findings
+        else:
+            parts[i], found = flat, flat_findings
+        findings.update(found)
+    return "".join(parts)
 
 
-def scan_text(text: str) -> Scan:
-    """Screen untrusted document text. Returns cleaned text plus counts of what was found."""
+def scan_text(text: str, mask_personal: bool = True) -> Scan:
+    """Screen untrusted document text. Returns cleaned text plus counts of what was found.
+
+    `mask_personal=False` keeps emails and phone numbers: for a client's own business documents, where
+    "orders@shop.example" is the answer, not a leak. Injection, hidden text and secrets are always handled."""
     findings: Counter = Counter()
     text = unicodedata.normalize("NFKC", text)  # fullwidth and compatibility tricks
     stripped = _HIDDEN.sub("", text)
     if hidden := len(text) - len(stripped):
         findings[("hidden", "hidden characters")] += hidden
     text = _quarantine_injection(stripped, findings)
-    text = mask_sensitive(text, findings)
+    text = mask_sensitive(text, findings, personal=mask_personal)
     return Scan(text=text, findings=findings)
 
 
