@@ -3,6 +3,8 @@
     python -m scripts.audit_report                  # everything in audit/audit.jsonl
     python -m scripts.audit_report --session ID     # one session
     python -m scripts.audit_report --file other.jsonl
+    python -m scripts.audit_report --pricing my-prices.yaml   # price the tokens (default: pricing.yaml, else the example)
+    python -m scripts.audit_report --as-model gemini-2.5-flash   # what would these same tokens cost on another model?
 
 "Rejected" means a tool returned an error: a gate said no (not approved, tests not locked, a
 bad path...) or the input was invalid. Both are worth reading; neither crashed anything.
@@ -16,7 +18,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from shared import audit  # noqa: E402
+from shared import audit, pricing as pricing_module  # noqa: E402
 
 
 def _table(headers: list[str], rows: list[list]) -> str:
@@ -26,7 +28,48 @@ def _table(headers: list[str], rows: list[list]) -> str:
     return "\n".join([line(headers), line(["-" * w for w in widths]), *(line(r) for r in cells)])
 
 
-def summarise(events: list[dict]) -> str:
+def _money(amount: float, currency: str) -> str:
+    return f"{currency} {amount:,.4f}" if amount < 1 else f"{currency} {amount:,.2f}"
+
+
+def _cost_section(models: list[dict], session_count: int, pricing: "pricing_module.Pricing | None",
+                  as_model: "str | None" = None) -> list[str]:
+    """Tokens priced from a price file the user controls. Always labelled an estimate."""
+    if pricing is None:
+        return ["COST (estimate)", "  No price file: showing tokens only. Copy pricing.example.yaml to pricing.yaml "
+                "and fill in your model's prices.", ""]
+    by_model: dict[str, list[dict]] = defaultdict(list)
+    for e in models:
+        by_model[as_model or e.get("model") or "(model not recorded)"].append(e)
+    rows, total, unpriced = [], 0.0, []
+    for model, evs in sorted(by_model.items()):
+        tin, tout, think = (sum(e.get(k) or 0 for e in evs) for k in ("tokens_in", "tokens_out", "tokens_thinking"))
+        rate = pricing.rate_for(model)
+        if rate is None:
+            unpriced.append(model)
+            rows.append([model, len(evs), tin, tout, think, "-", "unpriced"])
+            continue
+        cost = rate.cost(tin, tout, think)
+        total += cost
+        rows.append([model, len(evs), tin, tout, think, f"{rate.input_per_million:g} / {rate.output_per_million:g}",
+                     _money(cost, pricing.currency)])
+    title = f"COST (estimate, as if every call had run on {as_model})" if as_model else "COST (estimate)"
+    out = [title, _table(["model", "calls", "tokens in", "tokens out", "thinking",
+                                     f"{pricing.currency}/M in / out", "cost"], rows)]
+    if len(unpriced) < len(by_model):
+        out.append(f"  Total (priced models): {_money(total, pricing.currency)}"
+                   + (f"   |   per session: {_money(total / session_count, pricing.currency)} over {session_count} sessions"
+                      if session_count > 1 else ""))
+    else:
+        out.append("  Nothing could be priced yet.")
+    if unpriced:
+        out.append(f"  Not priced (add to {pricing.path.name}): {', '.join(unpriced)}")
+    out.append(f"  Estimate from {pricing.path.name} (as of {pricing.as_of or 'unknown date'}; {pricing.source or 'no source given'}). "
+               "Thinking tokens are billed as output unless the entry says otherwise. This is not a bill.")
+    return out + [""]
+
+
+def summarise(events: list[dict], pricing: "pricing_module.Pricing | None" = None, as_model: "str | None" = None) -> str:
     if not events:
         return "No audit events yet."
     tools = [e for e in events if e["event"] == "tool"]
@@ -62,6 +105,10 @@ def summarise(events: list[dict]) -> str:
     out += ["MODEL CALLS", _table(["agent", "calls", "ok", "no content", "max tokens", "errors", "tokens in", "tokens out",
                                    "thinking"], rows), ""]
 
+    if models:
+        sessions = len({e.get("session") for e in models} - {None})
+        out += _cost_section(models, sessions, pricing, as_model)
+
     if uploads:
         out += ["UPLOADS", _table(["file", "kind", "guardrail / note"], [
             [e.get("file", "?"), e.get("kind", "?"), e.get("guardrail") or e.get("note") or "clean"] for e in uploads]), ""]
@@ -85,11 +132,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--file", type=Path, help="audit file (default: audit/audit.jsonl)")
     parser.add_argument("--session", help="only this session id")
+    parser.add_argument("--pricing", type=Path, help="price file (default: pricing.yaml, else pricing.example.yaml)")
+    parser.add_argument("--as-model", help="price every recorded call as if it had run on this model, e.g. gemini-2.5-flash")
     args = parser.parse_args(argv)
     events = audit.read_events(args.file)
     if args.session:
         events = [e for e in events if e.get("session") == args.session]
-    print(summarise(events))
+    try:
+        prices = pricing_module.load(args.pricing)
+    except pricing_module.PricingError as exc:
+        print(f"Note: costs not shown. {exc}\n", file=sys.stderr)
+        prices = None
+    print(summarise(events, prices, args.as_model))
     return 0
 
 

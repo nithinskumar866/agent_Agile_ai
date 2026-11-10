@@ -1,0 +1,29 @@
+# Prices used by `python -m scripts.audit_report` to turn recorded tokens into an ESTIMATED cost.
+#
+# These are EXAMPLE values, not a quote. Prices change, differ by region and by tier, and a provider's own
+# price sheet is the only authority: check it before you show a number to a customer.
+# Copy this file to pricing.yaml (git-ignored) and edit your copy; the report uses pricing.yaml when it exists.
+currency: USD
+as_of: "2026-11-10"
+source: https://cloud.google.com/vertex-ai/generative-ai/pricing
+
+# A model name is matched by substring (case-insensitive); the longest match wins, so "gemini-2.5-flash-lite"
+# beats "gemini-2.5-flash". Thinking tokens are billed at the output price (as Gemini does); set
+# thinking_as_output: false on an entry whose provider does not bill them.
+models:
+  - match: gemini-2.5-flash-lite
+    input_per_million: 0.10
+    output_per_million: 0.40
+    note: Vertex AI list price for text input, as seen on 2026-11-10; verify before quoting
+  - match: gemini-2.5-flash
+    input_per_million: 0.30
+    output_per_million: 2.50
+    note: Vertex AI list price as seen on 2026-11-10; verify before quoting
+  - match: nemotron
+    input_per_million: 0.0
+    output_per_million: 0.0
+    note: NVIDIA's free development endpoint; check your plan, this is not a statement about NVIDIA's pricing
+# Add the model you actually deploy, for example:
+#  - match: gemini-3.6-flash
+#    input_per_million: 0.0     # <- fill in from the price sheet
+#    output_per_million: 0.0

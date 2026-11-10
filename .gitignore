@@ -11,3 +11,4 @@ workspace/
 .tools/
 data/
 audit/
+pricing.yaml

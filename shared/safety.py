@@ -29,6 +29,7 @@ MAX_TOOL_RESULT_CHARS = int(os.getenv("AGENTCORP_MAX_TOOL_RESULT_CHARS", "40000"
 MAX_CONTEXT_CHARS = int(os.getenv("AGENTCORP_MAX_CONTEXT_CHARS", "3000000"))
 
 _started: dict[Any, float] = {}
+_models: dict[Any, str] = {}  # which model a call went to, so the audit log can price it later
 _seen_uploads: set[str] = set()
 _notified: dict[Any, set[str]] = {}   # session -> uploads already announced to the client
 _pending: dict[Any, dict[str, str]] = {}  # session -> {upload sha: notice} waiting for the next reply
@@ -93,7 +94,9 @@ async def before_model(ctx, llm_request) -> Optional[LlmResponse]:
         return LlmResponse(content=types.Content(role="model", parts=[types.Part(text=(
             "This conversation has grown too large for the model to read, so I cannot continue in it. "
             "Please start a new session; the saved requirements are not lost if you keep the same project."))]))
-    _started[("model", getattr(ctx, "invocation_id", None), getattr(ctx, "agent_name", None))] = time.perf_counter()
+    key = ("model", getattr(ctx, "invocation_id", None), getattr(ctx, "agent_name", None))
+    _started[key] = time.perf_counter()
+    _models[key] = str(llm_request.model)
     return None
 
 
@@ -129,13 +132,14 @@ async def after_model(ctx, response: LlmResponse) -> Optional[LlmResponse]:
     if response.partial:
         return None
     usage = response.usage_metadata
+    key = ("model", getattr(ctx, "invocation_id", None), getattr(ctx, "agent_name", None))
     audit.record(
-        "model", **_who(ctx), outcome=_outcome(response),
+        "model", **_who(ctx), model=_models.pop(key, None), outcome=_outcome(response),
         finish=getattr(response.finish_reason, "name", None),
         tokens_in=getattr(usage, "prompt_token_count", None), tokens_out=getattr(usage, "candidates_token_count", None),
         tokens_thinking=getattr(usage, "thoughts_token_count", None),
         error=audit.clip(response.error_message, 200) if response.error_message else None,
-        ms=_ms(("model", getattr(ctx, "invocation_id", None), getattr(ctx, "agent_name", None))))
+        ms=_ms(key))
     return _with_upload_notice(_who(ctx)["session"], response)
 
 
