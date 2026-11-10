@@ -424,3 +424,35 @@ def test_problem_lists_are_capped():
     from shared.args import brief
     shown = brief([f"problem {i} " + "y" * 1000 for i in range(50)])
     assert len(shown) == 11 and all(len(p) <= 301 for p in shown[:10]) and "40 more" in shown[-1]
+
+
+# ── draft tests are checked for mistakes that would crash them (INC-11) ────
+
+def test_a_conftest_missing_import_pytest_is_refused_before_it_can_be_locked(ws, ctx, monkeypatch):
+    """INC-11: a locked suite whose conftest.py lacked `import pytest` crashed every run and, being
+    locked, could not be repaired without a PRD change. It must be caught at write time."""
+    use_fakes(monkeypatch)
+    approved_project(ctx)
+    conftest = "import os\n\n@pytest.fixture\ndef client():\n    return os.getcwd()\n"
+    res = write(ctx, files=[{"path": "qa_tests/test_calc.py", "content": TEST_FILE},
+                            {"path": "qa_tests/conftest.py", "content": conftest}])
+    assert "Nothing was written" in res["error"]
+    problem = " ".join(res["problems"])
+    assert "qa_tests/conftest.py:3" in problem and "undefined name 'pytest'" in problem
+    assert not load_suite(ctx.state).files  # nothing was saved, so nothing can be locked broken
+    assert write(ctx, files=[{"path": "qa_tests/test_calc.py", "content": TEST_FILE},
+                             {"path": "qa_tests/conftest.py", "content": "import pytest\n" + conftest}])["ok"]
+
+
+def test_a_syntax_error_in_a_draft_test_is_refused_with_its_line(ws, ctx, monkeypatch):
+    use_fakes(monkeypatch)
+    approved_project(ctx)
+    res = write(ctx, files=[{"path": "qa_tests/test_calc.py", "content": "def test_x(:\n    pass\n"}],
+                cases=[{"criterion_id": "FR-1.AC1", "test": "qa_tests/test_calc.py::test_x"}])
+    assert "syntax error" in " ".join(res["problems"]) and "qa_tests/test_calc.py:1" in " ".join(res["problems"])
+
+
+def test_static_check_allows_what_pytest_provides_and_does_not_need_the_app_code():
+    ok = ("from app.main import app  # the code does not exist yet; that is expected\n"
+          "def test_a(tmp_path, monkeypatch):\n    assert __file__ and tmp_path\n")
+    assert logic.static_problems("qa_tests/test_a.py", ok) == []

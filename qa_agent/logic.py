@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from dataclasses import dataclass
 from typing import Optional
 
 from shared.spec import RequirementsSpec
-from shared.testsuite import MAX_TEST_RUNS, TEST_DIR, CaseResult, TestSuite, is_stale
+from shared.testsuite import MAX_TEST_RUNS, TEST_DIR, CaseResult, SmokeResult, TestSuite, is_stale
 
 
 @dataclass(frozen=True)
@@ -48,8 +49,20 @@ def uncovered(suite: TestSuite, spec: RequirementsSpec) -> list[str]:
     return [cid for cid in criteria(spec) if cid not in covered]
 
 
+_WEB_STACK = re.compile(r"fastapi|flask", re.I)
+
+
+def needs_smoke(stack: list[str]) -> bool:
+    """A web app we can start (FastAPI or Flask) must come with a real-run smoke request."""
+    return any(_WEB_STACK.search(t) for t in stack)
+
+
+def smoke_failures(smoke: Optional[SmokeResult]) -> list[str]:
+    return [f"{st.name}: {st.detail}" for st in smoke.steps if not st.ok] if smoke else []
+
+
 def lock_blocker(suite: TestSuite, spec: RequirementsSpec, design_version: int,
-                 design_dirty: bool) -> Optional[str]:
+                 design_dirty: bool, stack: Optional[list[str]] = None) -> Optional[str]:
     """Why the suite may not be locked yet, or None."""
     if spec.meta.status != "approved":
         return ("Tests are written from client-approved acceptance criteria, and the PRD is "
@@ -65,7 +78,32 @@ def lock_blocker(suite: TestSuite, spec: RequirementsSpec, design_version: int,
         return "No draft tests yet. Call write_test_suite first."
     if gaps := uncovered(suite, spec):
         return f"Acceptance criteria with no test and no manual check: {gaps}."
+    if needs_smoke(stack or []) and not suite.smoke_requests:
+        return ("This is a web app, so the suite needs at least one smoke request: a valid-input request that the "
+                "real app, started on a fresh folder, must answer (e.g. POST /signup with a valid email). "
+                "Pass smoke_requests to write_test_suite.")
     return None
+
+
+# ── static check of draft test files ─────────────────────────────────────────
+
+def static_problems(path: str, content: str) -> list[str]:
+    """Mistakes that would crash the tests before a single assertion runs: a syntax error, or a name
+    used but never imported or defined (the classic: `@pytest.fixture` with no `import pytest`).
+
+    Found live: a locked suite whose conftest.py lacked `import pytest` could not be repaired
+    (locked tests change only with the PRD), so the whole flow stalled on a missing import. This
+    runs at write time, before locking, so the QA agent fixes it at once. It does NOT check that the
+    app's own modules exist: the code has not been written yet when the tests are."""
+    from pyflakes import checker, messages
+
+    try:
+        tree = ast.parse(content, filename=path)
+    except SyntaxError as exc:
+        return [f"{path}:{exc.lineno}: syntax error: {exc.msg}"]
+    undefined = (messages.UndefinedName, messages.UndefinedLocal, messages.UndefinedExport)
+    found = [m for m in checker.Checker(tree, filename=path).messages if isinstance(m, undefined)]
+    return [f"{path}:{m.lineno}: {m.message % m.message_args}" for m in sorted(found, key=lambda m: m.lineno)]
 
 
 # ── pytest node IDs ──────────────────────────────────────────────────────────
@@ -133,7 +171,8 @@ def status_line(suite: TestSuite, spec: RequirementsSpec) -> str:
     if not suite.files:
         return "No acceptance tests yet."
     state = f"locked v{suite.version} (PRD v{suite.based_on_prd_version})" if suite.locked else "DRAFT, not locked"
-    line = f"Test suite {state} | Cases: {len(suite.cases)} | Manual checks: {len(suite.manual_checks)}"
+    line = (f"Test suite {state} | Cases: {len(suite.cases)} | Manual checks: {len(suite.manual_checks)} | "
+            f"Smoke requests: {len(suite.smoke_requests)}")
     if is_stale(suite, spec.meta.version):
         line += f" | STALE: PRD is now v{spec.meta.version}; update and re-lock the tests"
     if suite.locked:
@@ -175,6 +214,17 @@ def render_report_markdown(suite: TestSuite, spec: RequirementsSpec, project: st
                          "MANUAL CHECK NEEDED |")
     lines.append("")
 
+    if last and last.smoke:
+        lines.extend(["## Real-run smoke check", "",
+                      f"The real app was started on a fresh copy of the project and used like a visitor: "
+                      f"**{last.smoke.outcome.upper()}**.", ""])
+        if last.smoke.steps:
+            lines.extend(["| Step | Result | Detail |", "| :--- | :--- | :--- |"])
+            lines.extend(f"| {_cell(st.name)} | {'ok' if st.ok else 'FAILED'} | {_cell(st.detail)} |"
+                         for st in last.smoke.steps)
+            lines.append("")
+        if last.smoke.note:
+            lines.extend([f"Note: {last.smoke.note}", ""])
     if last and (bad := [c for c in last.cases if c.outcome != "passed"]):
         lines.extend(["## Failures", ""])
         lines.extend(f"- `{c.test}` ({c.criterion_id}): {c.outcome}. {c.message}" for c in bad)
@@ -186,7 +236,9 @@ def render_report_markdown(suite: TestSuite, spec: RequirementsSpec, project: st
     lines.extend(f"- Run {r.number} (suite v{r.suite_version}, {r.at}): {r.outcome}, "
                  f"{r.passed} passed, {r.failed} failed, {r.missing} missing" for r in suite.runs)
     lines.extend(["", "## Not covered by this report", "",
-                  "- Only the Python app folder is tested; frontend code is not executed.",
+                  "- Only the Python app folder is tested by the acceptance tests. The smoke check starts the real app, "
+                  "checks that the page and its files are served, and syntax-checks JavaScript, but it does not click "
+                  "through the page in a browser (layout, mobile, behaviour of the script are for a person to check).",
                   "- Criteria marked as manual checks need a person to verify them.",
                   "- Passing tests show the code meets these acceptance criteria as tested, nothing more.",
                   ""])

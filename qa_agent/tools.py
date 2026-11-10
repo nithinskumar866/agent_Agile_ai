@@ -20,12 +20,13 @@ from dev_agent import logic as dev_logic
 from dev_agent import workspace
 from shared.args import ArgumentFormatError, as_list, brief
 from shared.spec import load_spec
-from shared.testsuite import (MAX_TEST_RUNS, TEST_DIR, LockedFile, ManualCheck, TestCase, TestFile, TestRun,
-                              is_stale, load_suite, save_suite)
+from shared.testsuite import (MAX_TEST_RUNS, TEST_DIR, LockedFile, ManualCheck, SmokeRequest, TestCase, TestFile,
+                              TestRun, is_stale, load_suite, save_suite)
 
 from . import logic, runner
 
 MAX_TEST_FILES = 20
+MAX_SMOKE_REQUESTS = 10
 _PINNED = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[A-Za-z0-9,._-]+\])?==[A-Za-z0-9.!+_-]+$")
 
 # Indirections so tests can swap in fakes.
@@ -80,6 +81,8 @@ def _validate_files(files) -> tuple[list[TestFile], list[str]]:
             problems.append(f"{rel} is listed twice.")
         elif len(f.content.encode("utf-8")) > workspace.MAX_FILE_BYTES:
             problems.append(f"{rel} is larger than {workspace.MAX_FILE_BYTES} bytes.")
+        elif static := logic.static_problems(rel, f.content):
+            problems.extend(f"{problem} (fix this before the tests are locked)" for problem in static[:3])
         else:
             seen.add(rel)
             parsed.append(TestFile(path=rel, content=f.content))
@@ -116,6 +119,7 @@ async def write_test_suite(
     manual_checks: Optional[List[ManualCheck]] = None,
     test_dependencies: Optional[List[str]] = None,
     project: str = "",
+    smoke_requests: Optional[List[SmokeRequest]] = None,
 ) -> dict:
     """Write the draft acceptance tests (pytest) into workspace/<project>/qa_tests/,
     replacing any previous draft. Allowed until the suite is locked. Write tests BEFORE the
@@ -137,6 +141,13 @@ async def write_test_suite(
             pytest is always installed.
         project: Folder name under workspace/, e.g. 'todo-app'. Needed only if no project
             folder exists yet.
+        smoke_requests: Required for a web app (FastAPI or Flask). Requests the REAL app, started
+            on a fresh folder with no database or data files, must answer, each with `method`,
+            `path` (e.g. /signup), `body` (JSON, optional) and `expect` (accepted status codes,
+            default [200, 201, 204]). Give the main success journey with VALID input, e.g.
+            method POST, path /signup, body {"email": "smoke@example.com"}. They are locked with the
+            tests. They catch what a test client's own setup hides: tables never created,
+            files never served.
     """
     state = tool_context.state
     spec = load_spec(state)
@@ -153,6 +164,7 @@ async def write_test_suite(
         files, cases = as_list(files, "files"), as_list(cases, "cases")
         manual_checks = as_list(manual_checks, "manual_checks")
         test_dependencies = as_list(test_dependencies, "test_dependencies")
+        smoke_requests = as_list(smoke_requests, "smoke_requests")
     except ArgumentFormatError as exc:
         return {"error": f"Nothing was written. {exc}"}
     parsed_files, problems = _validate_files(files)
@@ -171,6 +183,14 @@ async def write_test_suite(
             problems.append(f"Manual check {m.criterion_id} needs a reason.")
         else:
             checks.append(ManualCheck(criterion_id=m.criterion_id, reason=m.reason.strip()))
+    smokes = []
+    for r in smoke_requests[:MAX_SMOKE_REQUESTS]:
+        try:
+            smokes.append(SmokeRequest.model_validate(r))
+        except ValueError as exc:
+            problems.append(f"smoke request {str(r)[:80]}: {str(exc)[:160]}")
+    if len(smoke_requests) > MAX_SMOKE_REQUESTS:
+        problems.append(f"At most {MAX_SMOKE_REQUESTS} smoke requests.")
     deps = [str(d).strip() for d in test_dependencies]
     problems += [f"Test dependency {d!r} must be pinned like 'httpx==0.27.2'." for d in deps if not _PINNED.match(d)]
     if not parsed_files and not problems:
@@ -219,8 +239,9 @@ async def write_test_suite(
                               sha256=hashlib.sha256(f.content.encode("utf-8")).hexdigest()) for f in parsed_files]
     suite.cases = parsed_cases
     suite.manual_checks = checks
+    suite.smoke_requests = smokes
     suite.change_log.append(f"Draft tests written: {len(parsed_files)} files, {len(parsed_cases)} cases, "
-                            f"{len(checks)} manual checks")
+                            f"{len(checks)} manual checks, {len(smokes)} smoke requests")
     save_suite(state, suite)
     return {"ok": True, "workspace": f"workspace/{slug}/{TEST_DIR}/", "files": [f.path for f in parsed_files],
             "cases": len(parsed_cases), "uncovered_criteria": logic.uncovered(suite, spec),
@@ -235,7 +256,8 @@ def lock_test_suite(tool_context: ToolContext) -> dict:
     state = tool_context.state
     spec, suite = load_spec(state), load_suite(state)
     design = dev_logic.load_tech_design(state)
-    if blocker := logic.lock_blocker(suite, spec, design.version, design.has_unpublished_changes):
+    stack = [t.technology for t in design.tech_stack]
+    if blocker := logic.lock_blocker(suite, spec, design.version, design.has_unpublished_changes, stack):
         return {"error": blocker}
     suite.version += 1
     suite.locked = True
@@ -251,8 +273,11 @@ def lock_test_suite(tool_context: ToolContext) -> dict:
 
 async def run_tests(tool_context: ToolContext) -> dict:
     """Run the locked acceptance tests against the implemented code, in an isolated Docker
-    container with no network. The result is recorded by the system, not reported by you.
-    At most 5 runs per suite version; after that, stop and hand the decision to the client.
+    container with no network, then a real-run smoke check: the actual app is started on a fresh
+    copy, its page and files are fetched, JavaScript is syntax-checked, and the locked smoke
+    requests are sent. The run passes only if both pass. The result is recorded by the system,
+    not reported by you. At most 5 runs per suite version; after that, stop and hand the
+    decision to the client.
     """
     state = tool_context.state
     spec, suite = load_spec(state), load_suite(state)
@@ -281,7 +306,9 @@ async def run_tests(tool_context: ToolContext) -> dict:
         run.passed = sum(c.outcome == "passed" for c in run.cases)
         run.failed = sum(c.outcome == "failed" for c in run.cases)
         run.missing = sum(c.outcome == "missing" for c in run.cases)
-        run.outcome = "passed" if run.passed == len(run.cases) else "failed"
+        run.smoke = outcome.smoke
+        smoke_ok = outcome.smoke is None or outcome.smoke.outcome != "failed"
+        run.outcome = "passed" if run.passed == len(run.cases) and smoke_ok else "failed"
         run.output_tail = outcome.output[-2000:]
     suite.runs.append(run)
     suite.change_log.append(f"Run {run.number}: {run.outcome} ({run.passed}/{len(suite.cases)} passed)")
@@ -296,6 +323,9 @@ async def run_tests(tool_context: ToolContext) -> dict:
     if bad := [c for c in run.cases if c.outcome != "passed"]:
         result["failures"] = [c.model_dump() for c in bad]
         result["output_tail"] = run.output_tail
+    if run.smoke:
+        result["smoke"] = {"outcome": run.smoke.outcome, "failed_steps": brief(logic.smoke_failures(run.smoke)),
+                           **({"note": run.smoke.note} if run.smoke.note else {})}
     if run.outcome != "passed":
         result["next"] = ("Run budget spent: stop and report to the client." if left == 0 else
                           "dev_agent fixes the code (never the tests) with implement_scaffold, then runs again.")

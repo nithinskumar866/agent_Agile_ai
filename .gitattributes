@@ -1,0 +1,3 @@
+# Keep generated demo files byte-for-byte: line-ending conversion would corrupt a PDF.
+*.pdf binary
+*.png binary

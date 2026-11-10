@@ -1,5 +1,6 @@
 google-adk[mcp,eval,toolbox]==2.11.0   # mcp: MCP SDK (tested 2.3.0); eval: adk eval + Vertex AI SDK; toolbox: MCP Toolbox client
 pypdf>=5.0   # reads uploaded PDF briefs
+pyflakes>=3.2   # catches undefined names in draft tests before they are locked
 litellm>=1.105
 pyyaml>=6.0
 pytest>=9.0

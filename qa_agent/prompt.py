@@ -29,6 +29,11 @@ acceptance tests BEFORE the code exists, lock them, and run them. You never writ
      return not found), not only the happy path.
    - Tests run with no network and a read-only home folder, so keep any database in a
      temporary location set up by a qa_tests/conftest.py fixture.
+   - For a web app also pass `smoke_requests`: the main success journey with VALID input, e.g.
+     {"method": "POST", "path": "/signup", "body": {"email": "smoke@example.com"}, "expect": [200]}.
+     `run_tests` later starts the REAL app on a fresh folder (no database, no test setup) and
+     sends them, so they catch what a test client's own fixtures hide (tables never created,
+     files never served). Locking is refused for a web app without one.
    - Map every test to its criterion in `cases`. A criterion that genuinely cannot be
      automated (e.g. "works on mobile browsers") goes in `manual_checks` with the reason.
 3. Call `lock_test_suite`. From then on the tests are fixed until the PRD changes. Then stop

@@ -3,13 +3,16 @@
 This is the only code in AgentCorp that executes generated code, and no model controls
 it: the image, the command, the limits, and the test files are all fixed here.
 
-Two containers per run:
+Three containers per run:
 1. Install (network on, no project code): pip installs the app's requirements.txt plus
    pytest and the suite's pinned test dependencies into a cache folder. Wheels only
    (--only-binary), so no package build script runs. Cached by the requirements' hash.
 2. Test (network off): a fresh copy of the project, with the locked test files written
    from state over it, runs pytest. No network, capped memory/CPU/processes, no Linux
    capabilities, read-only root filesystem, killed on timeout, deleted afterwards.
+3. Smoke (same limits): a second fresh copy; the real app is started and used like a visitor would
+   (qa_agent/smoke_runner.py). JavaScript files are syntax-checked on the host with `node --check`,
+   which parses and never runs them.
 
 What this does not defend against: code under test runs in the same process as pytest,
 so deliberately hostile code could fake a result. The rules here stop a coder that takes
@@ -19,6 +22,7 @@ the easy way out (editing or skipping tests); the human gates cover the rest.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -29,7 +33,7 @@ from pathlib import Path
 from typing import Optional
 
 from dev_agent.workspace import workspace_root
-from shared.testsuite import TEST_DIR, TestSuite
+from shared.testsuite import TEST_DIR, SmokeResult, SmokeStep, TestSuite
 
 IMAGE = "python:3.12-slim"
 PYTEST = "pytest==8.3.3"
@@ -49,6 +53,8 @@ class RunOutcome:
     results: dict[tuple[str, str], tuple[str, str]]
     """(classname, name) -> (outcome, message), from pytest's JUnit XML."""
     output: str
+    smoke: Optional[SmokeResult] = None
+    """The real-run smoke check; None only when a caller (a test fake) did not run one."""
 
 
 def _timeout(name: str, default: int) -> int:
@@ -145,6 +151,71 @@ def parse_junit(xml_text: str) -> dict[tuple[str, str], tuple[str, str]]:
     return results
 
 
+_JS_SUFFIXES = {".js", ".mjs"}
+_MAX_JS_FILES = 30
+
+
+def check_javascript(work: Path) -> tuple[list[SmokeStep], str]:
+    """Syntax-check the project's JavaScript with `node --check` (parse only, nothing runs).
+
+    Returns (steps, note). The note says so when files exist but could not be checked."""
+    files = sorted(p for p in work.rglob("*") if p.is_file() and p.suffix in _JS_SUFFIXES
+                   and "node_modules" not in p.parts)[:_MAX_JS_FILES]
+    if not files:
+        return [], ""
+    node = shutil.which("node")
+    if not node:
+        return [], "JavaScript was NOT syntax-checked: node is not installed on this machine."
+    steps = []
+    for path in files:
+        rel = path.relative_to(work).as_posix()
+        try:
+            proc = subprocess.run([node, "--check", str(path)], capture_output=True, text=True, encoding="utf-8",
+                                  errors="replace", timeout=30)
+        except subprocess.TimeoutExpired:
+            steps.append(SmokeStep(name=f"JavaScript syntax {rel}", ok=False, detail="the syntax check timed out"))
+            continue
+        problem = next((ln.strip() for ln in proc.stderr.splitlines() if "Error" in ln), proc.stderr.strip()[:200])
+        steps.append(SmokeStep(name=f"JavaScript syntax {rel}", ok=proc.returncode == 0,
+                               detail="parses" if proc.returncode == 0 else problem[:200]))
+    return steps, ""
+
+
+def _smoke(project_path: Path, suite: TestSuite, deps: Path, run_root: Path) -> SmokeResult:
+    """Start the real app on a fresh copy and exercise it; see qa_agent/smoke_runner.py."""
+    app_dir = suite.app_dir.strip("/") or "."
+    work, ctl, out = run_root / "smoke-work", run_root / "smoke-ctl", run_root / "smoke-out"
+    _copy_project(project_path, work)  # the test folder is not copied: this is the app alone
+    js_steps, note = check_javascript(work)
+    ctl.mkdir()
+    out.mkdir()
+    shutil.copy(Path(__file__).with_name("smoke_runner.py"), ctl / "smoke_runner.py")
+    (ctl / "smoke.json").write_text(json.dumps({
+        "app_root": "/work" if app_dir == "." else f"/work/{app_dir}", "port": 8765,
+        "requests": [r.model_dump() for r in suite.smoke_requests]}), encoding="utf-8")
+    name = f"agentcorp-qa-smoke-{run_root.name}"
+    proc = _docker(
+        ["run", "--rm", "--name", name, "--network", "none", "--memory", "1g", "--cpus", "1",
+         "--pids-limit", "256", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+         "--read-only", "--tmpfs", "/tmp", "-e", "HOME=/tmp", "-e", "PYTHONPATH=/deps",
+         "-e", "PYTHONDONTWRITEBYTECODE=1",
+         *_mount(work, "/work"), *_mount(deps, "/deps", readonly=True),
+         *_mount(ctl, "/ctl", readonly=True), *_mount(out, "/out"), "-w", "/work", IMAGE,
+         "python", "-P", "/ctl/smoke_runner.py", "/ctl/smoke.json", "/out/smoke.json"],
+        timeout=_timeout("AGENTCORP_QA_SMOKE_TIMEOUT", 90), name=name)
+    result_file = out / "smoke.json"
+    if not result_file.is_file():
+        raise RunnerError(f"The smoke check produced no result (exit code {proc.returncode}):\n"
+                          f"{_tail(proc.stdout + proc.stderr)}")
+    try:
+        result = SmokeResult.model_validate_json(result_file.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise RunnerError(f"The smoke check result was unreadable: {str(exc)[:200]}") from exc
+    steps = js_steps + result.steps
+    outcome = "failed" if any(not st.ok for st in steps) else ("passed" if steps else "skipped")
+    return SmokeResult(outcome=outcome, steps=steps, note=" ".join(x for x in (result.note, note) if x))
+
+
 def run_suite(project_path: Path, suite: TestSuite) -> RunOutcome:
     """Run the locked suite against a copy of `project_path`. Raises RunnerError if the
     run could not take place; test failures are a normal RunOutcome."""
@@ -190,6 +261,7 @@ def run_suite(project_path: Path, suite: TestSuite) -> RunOutcome:
             results = parse_junit(junit.read_text(encoding="utf-8"))
         except ET.ParseError as exc:
             raise RunnerError(f"pytest results were unreadable: {exc}") from exc
-        return RunOutcome(exit_code=proc.returncode, results=results, output=output)
+        smoke = _smoke(project_path, suite, deps, run_root)
+        return RunOutcome(exit_code=proc.returncode, results=results, output=output, smoke=smoke)
     finally:
         shutil.rmtree(run_root, ignore_errors=True)

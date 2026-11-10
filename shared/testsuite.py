@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any, List, Literal, MutableMapping, Optional
 from pathlib import PurePosixPath
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 TEST_SUITE_STATE_KEY = "test_suite"
 TEST_DIR = "qa_tests"
@@ -44,6 +44,46 @@ class ManualCheck(BaseModel):
     """A criterion that cannot be checked by an automated test, with the reason."""
     criterion_id: str
     reason: str
+
+
+class SmokeRequest(BaseModel):
+    """One request the real-run smoke check sends to the real app, started on a fresh folder.
+
+    Written by the QA agent (only QA knows what a valid input looks like) and locked with the
+    tests, so the coder cannot loosen it. Example: POST /signup with a valid email, expecting 200.
+    """
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"] = "GET"
+    path: str = Field(..., description="Starts with '/', e.g. /signup")
+    body: Optional[dict] = Field(default=None, description="JSON body for POST/PUT/PATCH")
+    expect: List[int] = Field(default_factory=lambda: [200, 201, 204], description="Accepted status codes")
+
+    @field_validator("path")
+    @classmethod
+    def _path(cls, v: str) -> str:
+        v = v.strip()
+        if not v.startswith("/") or v.startswith("//") or len(v) > 200 or any(c.isspace() for c in v) or "://" in v:
+            raise ValueError("path must be a plain path on the app such as /signup (no host, no spaces)")
+        return v
+
+    @field_validator("expect")
+    @classmethod
+    def _expect(cls, v: List[int]) -> List[int]:
+        if not v or any(not 100 <= c <= 599 for c in v):
+            raise ValueError("expect must list HTTP status codes, e.g. [200]")
+        return v
+
+
+class SmokeStep(BaseModel):
+    name: str
+    ok: bool
+    detail: str = ""
+
+
+class SmokeResult(BaseModel):
+    """What the real-run smoke check found. 'skipped' means no web app was detected (with a note)."""
+    outcome: Literal["passed", "failed", "skipped"]
+    steps: List[SmokeStep] = Field(default_factory=list)
+    note: str = ""
 
 
 class LockedFile(BaseModel):
@@ -72,6 +112,8 @@ class TestRun(BaseModel):
     cases: List[CaseResult] = Field(default_factory=list)
     error: str = ""
     output_tail: str = ""
+    smoke: Optional[SmokeResult] = None
+    """The real-run smoke check. A run can be 'passed' only if this passed or was skipped."""
 
 
 class TestSuite(BaseModel):
@@ -85,6 +127,7 @@ class TestSuite(BaseModel):
     files: List[LockedFile] = Field(default_factory=list)
     cases: List[TestCase] = Field(default_factory=list)
     manual_checks: List[ManualCheck] = Field(default_factory=list)
+    smoke_requests: List[SmokeRequest] = Field(default_factory=list)
     runs: List[TestRun] = Field(default_factory=list)
     report_version: int = 0
     change_log: List[str] = Field(default_factory=list)
